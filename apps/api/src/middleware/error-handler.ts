@@ -2,8 +2,12 @@ import type { ErrorRequestHandler, RequestHandler } from 'express';
 
 import { AppError } from '../common/app-error';
 import { logger } from '../infrastructure/logger';
+import type { AppLocals } from './request-context';
 
-export const notFoundHandler: RequestHandler = (request, response) => {
+export const notFoundHandler: RequestHandler<unknown, unknown, unknown, unknown, AppLocals> = (
+  request,
+  response,
+) => {
   response.status(404).json({
     error: {
       code: 'NOT_FOUND',
@@ -13,7 +17,37 @@ export const notFoundHandler: RequestHandler = (request, response) => {
   });
 };
 
-export const errorHandler: ErrorRequestHandler = (error: unknown, request, response, _next) => {
+const isEntityParseError = (error: unknown): error is { type: string; status: number } =>
+  typeof error === 'object' &&
+  error !== null &&
+  'type' in error &&
+  (error as { type: unknown }).type === 'entity.parse.failed';
+
+export const errorHandler: ErrorRequestHandler<unknown, unknown, unknown, unknown, AppLocals> = (
+  error: unknown,
+  request,
+  response,
+  _next,
+) => {
+  if (isEntityParseError(error)) {
+    const statusCode = 400;
+    const code = 'VALIDATION_ERROR';
+    const message = 'Invalid JSON payload provided.';
+
+    logger.warn(
+      { err: error, requestId: response.locals.requestId, path: request.path, statusCode },
+      'invalid json body',
+    );
+    response.status(statusCode).json({
+      error: {
+        code,
+        message,
+        requestId: response.locals.requestId,
+      },
+    });
+    return;
+  }
+
   const appError = error instanceof AppError ? error : undefined;
   const statusCode = appError?.statusCode ?? 500;
   const code = appError?.code ?? 'INTERNAL_ERROR';

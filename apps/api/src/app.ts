@@ -15,11 +15,11 @@ export const createApp = ({ clientOrigin }: AppOptions): Express => {
   const app = express();
 
   app.disable('x-powered-by');
+  app.use(requestContext);
   app.use(helmet());
   app.use(cors({ origin: clientOrigin, credentials: true }));
   app.use(express.json({ limit: '100kb' }));
   app.use(cookieParser());
-  app.use(requestContext);
 
   app.use('/api/v1/health', createHealthRouter());
   app.use(notFoundHandler);

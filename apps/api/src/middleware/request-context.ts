@@ -4,7 +4,15 @@ import type { NextFunction, Request, Response } from 'express';
 
 import { logger } from '../infrastructure/logger';
 
-export const requestContext = (request: Request, response: Response, next: NextFunction): void => {
+export interface AppLocals {
+  requestId: string;
+}
+
+export const requestContext = (
+  request: Request,
+  response: Response<unknown, AppLocals>,
+  next: NextFunction,
+): void => {
   const requestId = request.header('x-request-id') ?? randomUUID();
   const startedAt = performance.now();
 
