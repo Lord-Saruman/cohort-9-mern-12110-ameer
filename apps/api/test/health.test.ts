@@ -34,4 +34,24 @@ describe('GET /api/v1/health', () => {
       expect.fail(error instanceof Error ? error.message : String(error));
     }
   });
+
+  it('handles oversized json payload with 413 error', async () => {
+    const app = createApp({ clientOrigin: 'http://localhost:5173' });
+    const largeString = 'a'.repeat(101 * 1024);
+
+    try {
+      const response = await request(app)
+        .post('/api/v1/health')
+        .set('Content-Type', 'application/json')
+        .send(JSON.stringify({ large: largeString }))
+        .expect(413);
+
+      expect(response.body.error.code).to.equal('PAYLOAD_TOO_LARGE');
+      expect(response.body.error.message).to.equal(
+        'Request payload exceeds the maximum allowed size.',
+      );
+    } catch (error: unknown) {
+      expect.fail(error instanceof Error ? error.message : String(error));
+    }
+  });
 });

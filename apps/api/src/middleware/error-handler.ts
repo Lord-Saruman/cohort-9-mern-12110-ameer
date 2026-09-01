@@ -17,11 +17,19 @@ export const notFoundHandler: RequestHandler<unknown, unknown, unknown, unknown,
   });
 };
 
-const isEntityParseError = (error: unknown): error is { type: string; status: number } =>
+interface BodyParserError {
+  type: string;
+  status?: number;
+  statusCode?: number;
+  message: string;
+}
+
+const isBodyParserError = (error: unknown): error is BodyParserError =>
   typeof error === 'object' &&
   error !== null &&
   'type' in error &&
-  (error as { type: unknown }).type === 'entity.parse.failed';
+  typeof (error as { type: unknown }).type === 'string' &&
+  (error as { type: string }).type.startsWith('entity.');
 
 export const errorHandler: ErrorRequestHandler<unknown, unknown, unknown, unknown, AppLocals> = (
   error: unknown,
@@ -29,14 +37,17 @@ export const errorHandler: ErrorRequestHandler<unknown, unknown, unknown, unknow
   response,
   _next,
 ) => {
-  if (isEntityParseError(error)) {
-    const statusCode = 400;
-    const code = 'VALIDATION_ERROR';
-    const message = 'Invalid JSON payload provided.';
+  if (isBodyParserError(error)) {
+    const statusCode = error.statusCode ?? error.status ?? 400;
+    const isOversized = error.type === 'entity.too.large' || statusCode === 413;
+    const code = isOversized ? 'PAYLOAD_TOO_LARGE' : 'VALIDATION_ERROR';
+    const message = isOversized
+      ? 'Request payload exceeds the maximum allowed size.'
+      : 'Invalid JSON payload provided.';
 
     logger.warn(
       { err: error, requestId: response.locals.requestId, path: request.path, statusCode },
-      'invalid json body',
+      'body parser rejected request',
     );
     response.status(statusCode).json({
       error: {
