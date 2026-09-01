@@ -22,7 +22,6 @@ export const createApp = ({ clientOrigin }: AppOptions): Express => {
   app.use(requestContext);
 
   app.use('/api/v1/health', createHealthRouter());
-  // Auth and notes routers are added here after their vertical slices are implemented.
   app.use(notFoundHandler);
   app.use(errorHandler);
 
