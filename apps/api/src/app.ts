@@ -2,16 +2,26 @@ import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import express, { type Express } from 'express';
 import helmet from 'helmet';
+import type { Pool } from 'mysql2/promise';
 
 import { errorHandler, notFoundHandler } from './middleware/error-handler';
 import { requestContext } from './middleware/request-context';
+import { createAuthRouter } from './modules/auth/auth.routes';
 import { createHealthRouter } from './routes/health.routes';
 
-export type AppOptions = {
+export interface AppOptions {
   clientOrigin: string;
-};
+  databasePool?: Pool;
+  jwtSecret?: string;
+  isProduction?: boolean;
+}
 
-export const createApp = ({ clientOrigin }: AppOptions): Express => {
+export const createApp = ({
+  clientOrigin,
+  databasePool,
+  jwtSecret = 'default-dev-secret',
+  isProduction = false,
+}: AppOptions): Express => {
   const app = express();
 
   app.disable('x-powered-by');
@@ -22,6 +32,16 @@ export const createApp = ({ clientOrigin }: AppOptions): Express => {
   app.use(cookieParser());
 
   app.use('/api/v1/health', createHealthRouter());
+  if (databasePool) {
+    app.use(
+      '/api/v1/auth',
+      createAuthRouter({
+        pool: databasePool,
+        jwtSecret,
+        isProduction,
+      }),
+    );
+  }
   app.use(notFoundHandler);
   app.use(errorHandler);
 
