@@ -51,6 +51,13 @@ export const verifyAuthToken = (token: string, secret: string): AuthSessionPaylo
   }
 };
 
+const isDuplicateKeyError = (error: unknown): boolean =>
+  typeof error === 'object' &&
+  error !== null &&
+  ('code' in error || 'errno' in error) &&
+  ((error as { code?: string }).code === 'ER_DUP_ENTRY' ||
+    (error as { errno?: number }).errno === 1062);
+
 export const registerUser = async (
   pool: Pool,
   input: RegisterInput,
@@ -68,15 +75,26 @@ export const registerUser = async (
   const passwordHash = await bcrypt.hash(input.password, 10);
   const id = randomUUID();
 
-  const user = await createUser(pool, {
-    id,
-    name: input.name,
-    email: input.email,
-    passwordHash,
-  });
+  try {
+    const user = await createUser(pool, {
+      id,
+      name: input.name,
+      email: input.email,
+      passwordHash,
+    });
 
-  const token = createAuthToken({ userId: user.id, email: user.email }, jwtSecret);
-  return { user: toUserDto(user), token };
+    const token = createAuthToken({ userId: user.id, email: user.email }, jwtSecret);
+    return { user: toUserDto(user), token };
+  } catch (error: unknown) {
+    if (isDuplicateKeyError(error)) {
+      throw new AppError({
+        statusCode: 409,
+        code: 'CONFLICT',
+        message: 'An account with this email address already exists.',
+      });
+    }
+    throw error;
+  }
 };
 
 export const loginUser = async (

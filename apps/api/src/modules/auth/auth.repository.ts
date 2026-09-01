@@ -1,5 +1,6 @@
 import type { Pool, RowDataPacket } from 'mysql2/promise';
 
+import { AppError } from '../../common/app-error';
 import type { UserRecord } from './auth.schemas';
 
 type UserRow = RowDataPacket & UserRecord;
@@ -21,7 +22,11 @@ export const createUser = async (pool: Pool, data: CreateUserData): Promise<User
 
   const user = await findUserById(pool, data.id);
   if (!user) {
-    throw new Error('User creation failed to persist record.');
+    throw new AppError({
+      statusCode: 500,
+      code: 'INTERNAL_ERROR',
+      message: 'Failed to retrieve newly created user.',
+    });
   }
 
   return user;

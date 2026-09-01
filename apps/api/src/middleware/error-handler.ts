@@ -29,7 +29,9 @@ const isBodyParserError = (error: unknown): error is BodyParserError =>
   error !== null &&
   'type' in error &&
   typeof (error as { type: unknown }).type === 'string' &&
-  (error as { type: string }).type.startsWith('entity.');
+  ((error as { type: string }).type.startsWith('entity.') ||
+    (error as { type: string }).type.startsWith('charset.') ||
+    (error as { type: string }).type.startsWith('encoding.'));
 
 export const errorHandler: ErrorRequestHandler<unknown, unknown, unknown, unknown, AppLocals> = (
   error: unknown,
@@ -40,13 +42,30 @@ export const errorHandler: ErrorRequestHandler<unknown, unknown, unknown, unknow
   if (isBodyParserError(error)) {
     const statusCode = error.statusCode ?? error.status ?? 400;
     const isOversized = error.type === 'entity.too.large' || statusCode === 413;
-    const code = isOversized ? 'PAYLOAD_TOO_LARGE' : 'VALIDATION_ERROR';
+    const isUnsupportedMedia =
+      error.type === 'charset.unsupported' ||
+      error.type === 'encoding.unsupported' ||
+      statusCode === 415;
+
+    const code = isOversized
+      ? 'PAYLOAD_TOO_LARGE'
+      : isUnsupportedMedia
+        ? 'UNSUPPORTED_MEDIA_TYPE'
+        : 'VALIDATION_ERROR';
+
     const message = isOversized
       ? 'Request payload exceeds the maximum allowed size.'
-      : 'Invalid JSON payload provided.';
+      : isUnsupportedMedia
+        ? 'The request encoding or character set is not supported.'
+        : 'Invalid JSON payload provided.';
 
     logger.warn(
-      { err: error, requestId: response.locals.requestId, path: request.path, statusCode },
+      {
+        parserErrorType: error.type,
+        requestId: response.locals.requestId,
+        path: request.path,
+        statusCode,
+      },
       'body parser rejected request',
     );
     response.status(statusCode).json({

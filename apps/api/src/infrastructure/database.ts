@@ -12,4 +12,9 @@ export const createDatabasePool = (environment: Environment): Pool =>
     waitForConnections: true,
     connectionLimit: 10,
     timezone: 'Z',
+    ssl: environment.DATABASE_SSL
+      ? {
+          rejectUnauthorized: environment.DATABASE_SSL_REJECT_UNAUTHORIZED,
+        }
+      : undefined,
   });

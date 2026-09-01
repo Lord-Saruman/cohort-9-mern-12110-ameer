@@ -33,7 +33,6 @@ const run = async (): Promise<void> => {
       const sql = await readFile(join(migrationsDirectory, file), 'utf8');
       const connection = await database.getConnection();
       try {
-        await connection.beginTransaction();
         for (const statement of sql
           .split(';')
           .map((item) => item.trim())
@@ -41,11 +40,7 @@ const run = async (): Promise<void> => {
           await connection.query(statement);
         }
         await connection.execute('INSERT INTO schema_migrations (name) VALUES (?)', [file]);
-        await connection.commit();
         logger.info({ migration: file }, 'migration applied');
-      } catch (error: unknown) {
-        await connection.rollback();
-        throw error;
       } finally {
         connection.release();
       }

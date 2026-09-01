@@ -11,6 +11,14 @@ const environmentSchema = z.object({
   DATABASE_NAME: z.string().min(1).default('notes_app'),
   DATABASE_USER: z.string().min(1).default('notes_user'),
   DATABASE_PASSWORD: z.string().min(1),
+  DATABASE_SSL: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((value) => value === 'true'),
+  DATABASE_SSL_REJECT_UNAUTHORIZED: z
+    .enum(['true', 'false'])
+    .default('true')
+    .transform((value) => value === 'true'),
   JWT_SECRET: z.string().min(32),
   JWT_EXPIRES_IN: z.string().default('8h'),
 });

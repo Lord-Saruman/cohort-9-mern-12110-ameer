@@ -5,7 +5,7 @@ import request from 'supertest';
 import { createApp } from '../src/app';
 import type { UserRecord } from '../src/modules/auth/auth.schemas';
 
-const createFakePool = (): Pool => {
+const createFakePool = (options: { simulateDuplicateOnInsert?: boolean } = {}): Pool => {
   const users: UserRecord[] = [];
 
   const fakePool = {
@@ -13,6 +13,18 @@ const createFakePool = (): Pool => {
       const normalizedSql = sql.toLowerCase();
 
       if (normalizedSql.includes('insert into users')) {
+        if (options.simulateDuplicateOnInsert) {
+          const duplicateError = new Error(
+            "Duplicate entry 'jane@example.com' for key 'users.email'",
+          ) as Error & {
+            code: string;
+            errno: number;
+          };
+          duplicateError.code = 'ER_DUP_ENTRY';
+          duplicateError.errno = 1062;
+          throw duplicateError;
+        }
+
         const [id, name, email, passwordHash] = params as [string, string, string, string];
         const now = new Date();
         const user: UserRecord = {
@@ -117,6 +129,33 @@ describe('Auth routes', () => {
     }
   });
 
+  it('handles concurrent ER_DUP_ENTRY during user creation with 409 conflict', async () => {
+    const pool = createFakePool({ simulateDuplicateOnInsert: true });
+    const app = createApp({
+      clientOrigin: 'http://localhost:5173',
+      databasePool: pool,
+      jwtSecret,
+    });
+
+    try {
+      const response = await request(app)
+        .post('/api/v1/auth/register')
+        .send({
+          name: 'Jane Doe',
+          email: 'jane@example.com',
+          password: 'securepassword123',
+        })
+        .expect(409);
+
+      expect(response.body.error.code).to.equal('CONFLICT');
+      expect(response.body.error.message).to.equal(
+        'An account with this email address already exists.',
+      );
+    } catch (error: unknown) {
+      expect.fail(error instanceof Error ? error.message : String(error));
+    }
+  });
+
   it('validates registration input fields with 400 error', async () => {
     const pool = createFakePool();
     const app = createApp({
@@ -137,6 +176,31 @@ describe('Auth routes', () => {
 
       expect(response.body.error.code).to.equal('VALIDATION_ERROR');
       expect(response.body.error.details).to.be.an('array');
+    } catch (error: unknown) {
+      expect.fail(error instanceof Error ? error.message : String(error));
+    }
+  });
+
+  it('rejects passwords exceeding 72 bytes with 400 validation error', async () => {
+    const pool = createFakePool();
+    const app = createApp({
+      clientOrigin: 'http://localhost:5173',
+      databasePool: pool,
+      jwtSecret,
+    });
+
+    try {
+      const longUtf8Password = '🔒'.repeat(20);
+      const response = await request(app)
+        .post('/api/v1/auth/register')
+        .send({
+          name: 'Jane Doe',
+          email: 'jane@example.com',
+          password: longUtf8Password,
+        })
+        .expect(400);
+
+      expect(response.body.error.code).to.equal('VALIDATION_ERROR');
     } catch (error: unknown) {
       expect.fail(error instanceof Error ? error.message : String(error));
     }
