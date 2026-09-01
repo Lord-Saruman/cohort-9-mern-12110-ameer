@@ -1,0 +1,2 @@
+# Automatically collapse generated lockfiles in GitHub Pull Request diffs
+package-lock.json linguist-generated=true
