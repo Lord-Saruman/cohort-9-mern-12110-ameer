@@ -1,0 +1,23 @@
+name: Quality
+
+on:
+  pull_request:
+  push:
+    branches: [main, develop]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      # The first dependency install creates package-lock.json; switch this to npm ci
+      # once that generated lockfile is committed on the foundation PR.
+      - run: npm install
+      - run: npm run format:check
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build

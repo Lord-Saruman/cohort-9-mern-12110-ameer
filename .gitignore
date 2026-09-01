@@ -1,0 +1,22 @@
+# Dependencies and build output
+node_modules/
+dist/
+coverage/
+.vite/
+*.tsbuildinfo
+
+# Local environment and logs
+.env
+.env.*
+!.env.example
+*.log
+logs/
+
+# Local planning material; keep the submission repository project-focused
+docs/
+
+# Tooling and operating-system files
+.DS_Store
+Thumbs.db
+.sonarlint/
+.scannerwork/
