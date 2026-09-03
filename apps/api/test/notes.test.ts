@@ -72,7 +72,6 @@ const createFakePool = (): Pool => {
       const [userId, searchTitle, searchContent] = params as [string, string?, string?];
       let filtered = notes.filter((n) => n.user_id === userId);
       if (searchTitle && searchContent) {
-        // Strip leading/trailing wildcards and unescape backslash escapes for literal matching
         const rawPattern = searchTitle
           .slice(1, -1)
           .replace(/\\([%_\\])/g, '$1')
@@ -243,7 +242,6 @@ describe('Notes routes and ownership isolation', () => {
 
     const cookie = await registerUserHelper(app, 'Alice', 'alice@example.com');
 
-    // Missing type: "doc"
     const resEmpty = await request(app)
       .post('/api/v1/notes')
       .set('Cookie', cookie)
@@ -251,7 +249,6 @@ describe('Notes routes and ownership isolation', () => {
       .expect(400);
     expect(resEmpty.body.error.code).to.equal('VALIDATION_ERROR');
 
-    // Wrong root type
     const resWrongType = await request(app)
       .post('/api/v1/notes')
       .set('Cookie', cookie)
@@ -284,7 +281,6 @@ describe('Notes routes and ownership isolation', () => {
       .set('Cookie', cookie)
       .send({ title: 'Huge Note', content: oversizedContent });
 
-    // Body parser may reject with 413 or schema validates with 400
     expect([400, 413]).to.include(res.status);
   });
 
@@ -670,7 +666,6 @@ describe('Notes routes and ownership isolation', () => {
 
     const cookie = await registerUserHelper(app, 'Alice', 'alice@example.com');
 
-    // Note with 100% discount
     await request(app)
       .post('/api/v1/notes')
       .set('Cookie', cookie)
@@ -680,7 +675,6 @@ describe('Notes routes and ownership isolation', () => {
       })
       .expect(201);
 
-    // Another note without %
     await request(app)
       .post('/api/v1/notes')
       .set('Cookie', cookie)
@@ -690,7 +684,6 @@ describe('Notes routes and ownership isolation', () => {
       })
       .expect(201);
 
-    // Search explicitly for '100%' - should only match 'Discount 100% off'
     const searchRes = await request(app)
       .get('/api/v1/notes?q=100%')
       .set('Cookie', cookie)

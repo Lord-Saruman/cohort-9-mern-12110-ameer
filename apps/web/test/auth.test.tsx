@@ -31,7 +31,6 @@ const createMockFetch = (handlers: Record<string, { status: number; body: unknow
       } as Response);
     }
 
-    // Default 404
     return Promise.resolve({
       ok: false,
       status: 404,
@@ -61,10 +60,8 @@ describe('Frontend Authentication Flows', () => {
 
     render(<App />);
 
-    // Shows loading initially
     expect(screen.getByRole('status', { name: /loading/i })).toBeInTheDocument();
 
-    // After session is restored, shows dashboard and user greeting
     await waitFor(() => {
       expect(screen.getByTestId('dashboard-page')).toBeInTheDocument();
     });
@@ -189,7 +186,6 @@ describe('Frontend Authentication Flows', () => {
 
     await user.type(screen.getByLabelText(/full name/i), 'Jane Doe');
     await user.type(screen.getByLabelText(/email address/i), 'jane@example.com');
-    // Short password (<12 chars)
     await user.type(screen.getByLabelText(/^password$/i, { selector: 'input' }), 'Short123');
 
     await user.click(screen.getByTestId('register-submit-button'));
@@ -343,10 +339,8 @@ describe('Frontend Authentication Flows', () => {
 
     await user.click(submitBtn);
 
-    // Button should be disabled during submission
     expect(submitBtn).toBeDisabled();
 
-    // Resolve login request
     resolveLogin!({
       ok: true,
       status: 200,
@@ -495,7 +489,6 @@ describe('Frontend Authentication Flows', () => {
       expect(screen.getByText('Password is too long.')).toBeInTheDocument();
     });
 
-    // Test clearing field errors on change
     await user.type(emailInput, 'a');
     expect(screen.queryByText('Email is invalid on server.')).not.toBeInTheDocument();
 
@@ -556,12 +549,10 @@ describe('Frontend Authentication Flows', () => {
       expect(screen.getByRole('heading', { name: /welcome back/i })).toBeInTheDocument();
     });
 
-    // 1. Submit empty
     await user.click(screen.getByTestId('login-submit-button'));
     expect(screen.getByText('Email address is required.')).toBeInTheDocument();
     expect(screen.getByText('Password is required.')).toBeInTheDocument();
 
-    // 2. Invalid email format
     const emailInput = screen.getByLabelText(/email address/i);
     await user.type(emailInput, 'notanemail');
     await user.click(screen.getByTestId('login-submit-button'));
@@ -582,7 +573,6 @@ describe('Frontend Authentication Flows', () => {
       },
     });
 
-    // Valid internal relative path
     window.history.pushState(
       { from: { pathname: '/dashboard', search: '?view=compact' } },
       '',
@@ -651,7 +641,6 @@ describe('Frontend Authentication Flows', () => {
       expect(screen.getByText('Unrecognized registration parameter.')).toBeInTheDocument();
     });
 
-    // Test clearing field errors
     await user.type(nameInput, 'a');
     expect(screen.queryByText('Name is taken.')).not.toBeInTheDocument();
 
@@ -684,18 +673,15 @@ describe('Frontend Authentication Flows', () => {
     const passwordInput = screen.getByLabelText(/^password$/i, { selector: 'input' });
     const submitBtn = screen.getByTestId('register-submit-button');
 
-    // 1. All empty
     await user.click(submitBtn);
     expect(screen.getByText('Full name is required.')).toBeInTheDocument();
     expect(screen.getByText('Email address is required.')).toBeInTheDocument();
     expect(screen.getByText('Password is required.')).toBeInTheDocument();
 
-    // 2. Name < 2 characters
     await user.type(nameInput, 'J');
     await user.click(submitBtn);
     expect(screen.getByText('Name must be at least 2 characters.')).toBeInTheDocument();
 
-    // 3. Password without mixed character classes
     await user.clear(nameInput);
     await user.type(nameInput, 'Jane Doe');
     await user.type(emailInput, 'jane@example.com');

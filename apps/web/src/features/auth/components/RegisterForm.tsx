@@ -18,7 +18,6 @@ export const RegisterForm = () => {
   const [formError, setFormError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
-  // Password rules evaluation
   const passwordCriteria = useMemo(() => {
     return {
       minLength: password.length >= 12,

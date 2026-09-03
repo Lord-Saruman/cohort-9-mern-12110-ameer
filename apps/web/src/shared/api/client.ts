@@ -38,7 +38,6 @@ const getApiBaseUrl = (): string => {
   let env: string | undefined;
 
   try {
-    // In Node/Jest, process is defined. In Vite, process.env.VITE_API_URL is statically inlined via define.
     env = process.env.VITE_API_URL;
   } catch {
     env = undefined;

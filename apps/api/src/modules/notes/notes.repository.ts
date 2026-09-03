@@ -26,10 +26,6 @@ export interface ListNotesOptions {
   pageSize: number;
 }
 
-/**
- * Escapes characters that have special meaning in MySQL LIKE patterns (% and _)
- * to treat user search inputs as literal strings.
- */
 export const escapeLikeWildcards = (term: string): string => term.replace(/([\\%_])/g, '\\$1');
 
 export const createNote = async (pool: Pool, data: CreateNoteData): Promise<NoteRecord> => {
