@@ -158,14 +158,15 @@ const createFakePool = (): Pool => {
       const remaining = notes.filter((n) => !(n.id === id && n.user_id === userId));
       notes.length = 0;
       notes.push(...remaining);
-      const header: ResultSetHeader = {
+      const header = {
         fieldCount: 0,
         affectedRows: initialLen - remaining.length,
         insertId: 0,
         info: '',
         serverStatus: 0,
         warningStatus: 0,
-      };
+        changedRows: 0,
+      } as unknown as ResultSetHeader;
       return [header, undefined];
     }
 

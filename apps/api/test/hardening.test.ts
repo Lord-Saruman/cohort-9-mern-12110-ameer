@@ -133,14 +133,15 @@ const createFakePool = (): Pool => {
       const remaining = notes.filter((n) => !(n.id === id && n.user_id === userId));
       notes.length = 0;
       notes.push(...remaining);
-      const header: ResultSetHeader = {
+      const header = {
         fieldCount: 0,
         affectedRows: initialLen - remaining.length,
         insertId: 0,
         info: '',
         serverStatus: 0,
         warningStatus: 0,
-      };
+        changedRows: 0,
+      } as unknown as ResultSetHeader;
       return [header, undefined];
     }
 
@@ -452,5 +453,157 @@ describe('End-to-End Hardening & Security Verification', () => {
     expect(res.body.error.code).to.equal('NOT_FOUND');
     expect(res.body.error.message).to.include('/api/v1/nonexistent-route');
     expect(res.body.error).to.have.property('requestId');
+  });
+
+  it('returns 400 VALIDATION_ERROR envelope for schema violations and malformed payloads', async () => {
+    const pool = createFakePool();
+    const app = createApp({
+      clientOrigin,
+      databasePool: pool,
+      jwtSecret,
+    });
+
+    const schemaRes = await request(app)
+      .post('/api/v1/auth/register')
+      .send({ name: 'A', email: 'invalid-email', password: 'short' })
+      .expect(400);
+
+    expect(schemaRes.body.error.code).to.equal('VALIDATION_ERROR');
+    expect(schemaRes.body.error).to.have.property('details');
+    expect(schemaRes.body.error).to.have.property('requestId');
+
+    const malformedRes = await request(app)
+      .post('/api/v1/auth/login')
+      .set('Content-Type', 'application/json')
+      .send('{"invalid": json}')
+      .expect(400);
+
+    expect(malformedRes.body.error.code).to.equal('VALIDATION_ERROR');
+    expect(malformedRes.body.error).to.have.property('requestId');
+  });
+
+  it('returns 409 CONFLICT envelope for duplicate registration attempts', async () => {
+    const pool = createFakePool();
+    const app = createApp({
+      clientOrigin,
+      databasePool: pool,
+      jwtSecret,
+    });
+
+    await registerUser(app, 'Unique User', 'unique@example.com');
+
+    const dupRes = await request(app)
+      .post('/api/v1/auth/register')
+      .send({ name: 'Duplicate User', email: 'unique@example.com', password: 'SecurePassword123' })
+      .expect(409);
+
+    expect(dupRes.body.error.code).to.equal('CONFLICT');
+    expect(dupRes.body.error.message).to.include('already exists');
+    expect(dupRes.body.error).to.have.property('requestId');
+  });
+
+  it('returns 413 PAYLOAD_TOO_LARGE envelope when request body exceeds 100kb limit', async () => {
+    const pool = createFakePool();
+    const app = createApp({
+      clientOrigin,
+      databasePool: pool,
+      jwtSecret,
+    });
+
+    const oversizedData = 'x'.repeat(101 * 1024);
+    const res = await request(app)
+      .post('/api/v1/health')
+      .set('Content-Type', 'application/json')
+      .send(JSON.stringify({ data: oversizedData }))
+      .expect(413);
+
+    expect(res.body.error.code).to.equal('PAYLOAD_TOO_LARGE');
+    expect(res.body.error).to.have.property('requestId');
+  });
+
+  it('returns 415 UNSUPPORTED_MEDIA_TYPE envelope for unsupported encodings or charsets', async () => {
+    const pool = createFakePool();
+    const app = createApp({
+      clientOrigin,
+      databasePool: pool,
+      jwtSecret,
+    });
+
+    const encodingRes = await request(app)
+      .post('/api/v1/health')
+      .set('Content-Type', 'application/json')
+      .set('Content-Encoding', 'invalid-encoding')
+      .send('{"test":true}')
+      .expect(415);
+
+    expect(encodingRes.body.error.code).to.equal('UNSUPPORTED_MEDIA_TYPE');
+    expect(encodingRes.body.error).to.have.property('requestId');
+
+    const charsetRes = await request(app)
+      .post('/api/v1/health')
+      .set('Content-Type', 'application/json; charset=invalid-charset')
+      .send('{"test":true}')
+      .expect(415);
+
+    expect(charsetRes.body.error.code).to.equal('UNSUPPORTED_MEDIA_TYPE');
+    expect(charsetRes.body.error).to.have.property('requestId');
+  });
+
+  it('returns 429 RATE_LIMIT_EXCEEDED envelope and resets after window expiry', async () => {
+    const pool = createFakePool();
+    const app = createApp({
+      clientOrigin,
+      databasePool: pool,
+      jwtSecret,
+      rateLimitMax: 2,
+      rateLimitWindowMs: 1000,
+    });
+
+    await request(app)
+      .post('/api/v1/auth/register')
+      .send({ name: 'User 1', email: 'user1@example.com', password: 'SecurePassword123' })
+      .expect(201);
+
+    await request(app)
+      .post('/api/v1/auth/register')
+      .send({ name: 'User 2', email: 'user2@example.com', password: 'SecurePassword123' })
+      .expect(201);
+
+    const limitedRes = await request(app)
+      .post('/api/v1/auth/register')
+      .send({ name: 'User 3', email: 'user3@example.com', password: 'SecurePassword123' })
+      .expect(429);
+
+    expect(limitedRes.body.error.code).to.equal('RATE_LIMIT_EXCEEDED');
+    expect(limitedRes.body.error).to.have.property('requestId');
+
+    await new Promise((resolve) => setTimeout(resolve, 1050));
+
+    await request(app)
+      .post('/api/v1/auth/register')
+      .send({ name: 'User 4', email: 'user4@example.com', password: 'SecurePassword123' })
+      .expect(201);
+  });
+
+  it('authenticates JWT tokens bearing standard RFC 7519 sub claims', async () => {
+    const pool = createFakePool();
+    const app = createApp({
+      clientOrigin,
+      databasePool: pool,
+      jwtSecret,
+    });
+
+    const tokenWithSub = jwt.sign(
+      { sub: '00000000-0000-0000-0000-000000000001', email: 'sub@example.com' },
+      jwtSecret,
+      { expiresIn: '1h' },
+    );
+
+    const res = await request(app)
+      .get('/api/v1/notes')
+      .set('Cookie', `token=${tokenWithSub}`)
+      .expect(200);
+
+    expect(res.body.data).to.be.an('array');
   });
 });
