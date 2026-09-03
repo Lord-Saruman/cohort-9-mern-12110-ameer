@@ -13,14 +13,20 @@ export interface AppOptions {
   clientOrigin: string;
   databasePool?: Pool;
   jwtSecret?: string;
+  jwtExpiresIn?: string;
   isProduction?: boolean;
+  rateLimitMax?: number;
+  rateLimitWindowMs?: number;
 }
 
 export const createApp = ({
   clientOrigin,
   databasePool,
   jwtSecret = 'default-dev-secret',
+  jwtExpiresIn = '8h',
   isProduction = false,
+  rateLimitMax,
+  rateLimitWindowMs,
 }: AppOptions): Express => {
   const app = express();
 
@@ -38,7 +44,10 @@ export const createApp = ({
       createAuthRouter({
         pool: databasePool,
         jwtSecret,
+        jwtExpiresIn,
         isProduction,
+        rateLimitMax,
+        rateLimitWindowMs,
       }),
     );
   }

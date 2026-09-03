@@ -1,10 +1,19 @@
 import { z } from 'zod';
 
+const PASSWORD_MIN_LENGTH = 12;
+
+const hasMixedCharacterClasses = (value: string): boolean =>
+  /[a-z]/.test(value) && /[A-Z]/.test(value) && /\d/.test(value);
+
 const passwordSchema = z
   .string()
-  .min(8)
+  .min(PASSWORD_MIN_LENGTH, `Password must be at least ${PASSWORD_MIN_LENGTH} characters.`)
   .refine((value) => Buffer.byteLength(value, 'utf8') <= 72, {
     message: 'Password must not exceed 72 bytes.',
+  })
+  .refine(hasMixedCharacterClasses, {
+    message:
+      'Password must contain at least one lowercase letter, one uppercase letter, and one digit.',
   });
 
 export const registerSchema = z.object({

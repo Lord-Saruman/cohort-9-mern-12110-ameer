@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
+import jwt, { type SignOptions } from 'jsonwebtoken';
 import type { Pool } from 'mysql2/promise';
 
 import { AppError } from '../../common/app-error';
@@ -20,8 +20,11 @@ export const toUserDto = (user: UserRecord): UserDto => ({
   createdAt: user.created_at.toISOString(),
 });
 
-export const createAuthToken = (payload: AuthSessionPayload, secret: string): string =>
-  jwt.sign(payload, secret, { expiresIn: '1d' });
+export const createAuthToken = (
+  payload: AuthSessionPayload,
+  secret: string,
+  expiresIn: string,
+): string => jwt.sign(payload, secret, { expiresIn: expiresIn as SignOptions['expiresIn'] });
 
 export const verifyAuthToken = (token: string, secret: string): AuthSessionPayload => {
   try {
@@ -42,7 +45,8 @@ export const verifyAuthToken = (token: string, secret: string): AuthSessionPaylo
       userId: String((decoded as { userId: unknown }).userId),
       email: String((decoded as { email: unknown }).email),
     };
-  } catch {
+  } catch (error: unknown) {
+    if (error instanceof AppError) throw error;
     throw new AppError({
       statusCode: 401,
       code: 'UNAUTHENTICATED',
@@ -62,6 +66,7 @@ export const registerUser = async (
   pool: Pool,
   input: RegisterInput,
   jwtSecret: string,
+  jwtExpiresIn: string,
 ): Promise<{ user: UserDto; token: string }> => {
   const existingUser = await findUserByEmail(pool, input.email);
   if (existingUser) {
@@ -83,7 +88,7 @@ export const registerUser = async (
       passwordHash,
     });
 
-    const token = createAuthToken({ userId: user.id, email: user.email }, jwtSecret);
+    const token = createAuthToken({ userId: user.id, email: user.email }, jwtSecret, jwtExpiresIn);
     return { user: toUserDto(user), token };
   } catch (error: unknown) {
     if (isDuplicateKeyError(error)) {
@@ -101,6 +106,7 @@ export const loginUser = async (
   pool: Pool,
   input: LoginInput,
   jwtSecret: string,
+  jwtExpiresIn: string,
 ): Promise<{ user: UserDto; token: string }> => {
   const user = await findUserByEmail(pool, input.email);
   if (!user) {
@@ -120,6 +126,6 @@ export const loginUser = async (
     });
   }
 
-  const token = createAuthToken({ userId: user.id, email: user.email }, jwtSecret);
+  const token = createAuthToken({ userId: user.id, email: user.email }, jwtSecret, jwtExpiresIn);
   return { user: toUserDto(user), token };
 };

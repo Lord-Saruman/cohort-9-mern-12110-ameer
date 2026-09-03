@@ -8,6 +8,7 @@ const app = createApp({
   clientOrigin: environment.CLIENT_ORIGIN,
   databasePool: database,
   jwtSecret: environment.JWT_SECRET,
+  jwtExpiresIn: environment.JWT_EXPIRES_IN,
   isProduction: environment.NODE_ENV === 'production',
 });
 
