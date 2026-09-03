@@ -19,6 +19,7 @@ export const Button = ({
     <button
       className={`btn btn-${variant} ${className}`}
       disabled={disabled || isLoading}
+      aria-busy={isLoading || undefined}
       {...props}
     >
       {isLoading && <Spinner size={16} />}

@@ -52,6 +52,8 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const logout = useCallback(async (): Promise<void> => {
     try {
       await authApi.logout();
+    } catch {
+      // Best-effort logout on server; local session is cleared regardless
     } finally {
       setUser(null);
     }

@@ -1,14 +1,25 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../features/auth/context/AuthContext';
 import { Button } from './Button';
 
 export const Navbar = () => {
   const { user, isAuthenticated, logout } = useAuth();
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+
+  const handleLogout = async () => {
+    setIsLoggingOut(true);
+    try {
+      await logout();
+    } finally {
+      setIsLoggingOut(false);
+    }
+  };
 
   return (
     <nav className="navbar" aria-label="Main Navigation">
       <Link to="/" className="navbar-brand">
-        <span>📝</span>
+        <span aria-hidden="true">📝</span>
         <span>Notes App</span>
       </Link>
 
@@ -18,7 +29,13 @@ export const Navbar = () => {
             <span className="user-name" data-testid="user-greeting">
               Signed in as <strong>{user.name}</strong>
             </span>
-            <Button variant="secondary" onClick={() => void logout()} data-testid="logout-button">
+            <Button
+              variant="secondary"
+              isLoading={isLoggingOut}
+              disabled={isLoggingOut}
+              onClick={() => void handleLogout()}
+              data-testid="logout-button"
+            >
               Sign Out
             </Button>
           </>

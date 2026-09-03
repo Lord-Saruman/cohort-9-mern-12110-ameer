@@ -6,9 +6,9 @@ import './App.css';
 
 export const App = () => {
   return (
-    <BrowserRouter>
+    <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <AuthProvider>
-        <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+        <div className="app-layout">
           <Navbar />
           <AppRoutes />
         </div>

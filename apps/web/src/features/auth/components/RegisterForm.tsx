@@ -22,6 +22,7 @@ export const RegisterForm = () => {
   const passwordCriteria = useMemo(() => {
     return {
       minLength: password.length >= 12,
+      maxLength: password.length <= 72,
       hasUpper: /[A-Z]/.test(password),
       hasLower: /[a-z]/.test(password),
       hasDigit: /\d/.test(password),
@@ -30,23 +31,31 @@ export const RegisterForm = () => {
 
   const validate = (): boolean => {
     const errors: Record<string, string> = {};
+    const trimmedName = name.trim();
+    const trimmedEmail = email.trim();
 
-    if (!name.trim()) {
+    if (!trimmedName) {
       errors.name = 'Full name is required.';
-    } else if (name.trim().length < 2) {
+    } else if (trimmedName.length < 2) {
       errors.name = 'Name must be at least 2 characters.';
+    } else if (trimmedName.length > 100) {
+      errors.name = 'Name must not exceed 100 characters.';
     }
 
-    if (!email.trim()) {
+    if (!trimmedEmail) {
       errors.email = 'Email address is required.';
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
       errors.email = 'Please enter a valid email address.';
+    } else if (trimmedEmail.length > 254) {
+      errors.email = 'Email address must not exceed 254 characters.';
     }
 
     if (!password) {
       errors.password = 'Password is required.';
     } else if (!passwordCriteria.minLength) {
       errors.password = 'Password must be at least 12 characters.';
+    } else if (!passwordCriteria.maxLength) {
+      errors.password = 'Password must not exceed 72 characters.';
     } else if (
       !passwordCriteria.hasUpper ||
       !passwordCriteria.hasLower ||
@@ -81,10 +90,18 @@ export const RegisterForm = () => {
           setFormError('An account with this email address already exists.');
         } else if (err.details && err.details.length > 0) {
           const mapped: Record<string, string> = {};
+          const unmapped: string[] = [];
           for (const item of err.details) {
-            mapped[item.field] = item.message;
+            if (item.field === 'name' || item.field === 'email' || item.field === 'password') {
+              mapped[item.field] = item.message;
+            } else {
+              unmapped.push(item.message);
+            }
           }
           setFieldErrors(mapped);
+          if (unmapped.length > 0) {
+            setFormError(unmapped.join(' '));
+          }
         } else {
           setFormError(err.message);
         }
@@ -109,6 +126,7 @@ export const RegisterForm = () => {
         label="Full Name"
         type="text"
         autoComplete="name"
+        maxLength={100}
         value={name}
         onChange={(e) => {
           setName(e.target.value);
@@ -126,6 +144,7 @@ export const RegisterForm = () => {
         label="Email Address"
         type="email"
         autoComplete="email"
+        maxLength={254}
         value={email}
         onChange={(e) => {
           setEmail(e.target.value);
@@ -143,6 +162,7 @@ export const RegisterForm = () => {
         label="Password"
         type="password"
         autoComplete="new-password"
+        maxLength={72}
         value={password}
         onChange={(e) => {
           setPassword(e.target.value);
@@ -155,11 +175,17 @@ export const RegisterForm = () => {
         required
       />
 
-      <div className="password-checklist" aria-label="Security requirements">
+      <div className="password-checklist" aria-label="Security requirements" aria-live="polite">
         <div className="checklist-title">Password must include:</div>
-        <div className={`checklist-item ${passwordCriteria.minLength ? 'valid' : 'invalid'}`}>
-          <span className="check-icon">{passwordCriteria.minLength ? '✓' : '○'}</span>
-          <span>At least 12 characters</span>
+        <div
+          className={`checklist-item ${
+            passwordCriteria.minLength && passwordCriteria.maxLength ? 'valid' : 'invalid'
+          }`}
+        >
+          <span className="check-icon">
+            {passwordCriteria.minLength && passwordCriteria.maxLength ? '✓' : '○'}
+          </span>
+          <span>Between 12 and 72 characters</span>
         </div>
         <div className={`checklist-item ${passwordCriteria.hasUpper ? 'valid' : 'invalid'}`}>
           <span className="check-icon">{passwordCriteria.hasUpper ? '✓' : '○'}</span>

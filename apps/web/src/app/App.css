@@ -333,3 +333,44 @@ a:hover {
   justify-content: center;
   min-height: 50vh;
 }
+
+.app-layout {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.dashboard-card {
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 2.5rem;
+  max-width: 640px;
+  margin: 2rem auto;
+  text-align: center;
+  box-shadow: var(--shadow-md);
+}
+
+.dashboard-card h1 {
+  font-size: 1.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.dashboard-card p {
+  color: var(--color-text-secondary);
+  margin-bottom: 1.5rem;
+}
+
+.dashboard-emoji {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+}
+
+.dashboard-info-box {
+  background-color: rgba(59, 130, 246, 0.1);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  border-radius: var(--radius-md);
+  padding: 1rem;
+  font-size: 0.875rem;
+  color: #93c5fd;
+}

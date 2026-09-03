@@ -387,4 +387,387 @@ describe('Frontend Authentication Flows', () => {
 
     expect(screen.queryByTestId('user-greeting')).not.toBeInTheDocument();
   });
+
+  it('displays server error alert when login fails with 500', async () => {
+    const user = userEvent.setup();
+
+    global.fetch = createMockFetch({
+      'GET /api/v1/auth/me': {
+        status: 401,
+        body: { error: { code: 'UNAUTHENTICATED' } },
+      },
+      'POST /api/v1/auth/login': {
+        status: 500,
+        body: {
+          error: {
+            code: 'INTERNAL_ERROR',
+            message: 'Database connection failed.',
+          },
+        },
+      },
+    });
+
+    window.history.pushState({}, '', '/login');
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: /welcome back/i })).toBeInTheDocument();
+    });
+
+    await user.type(screen.getByLabelText(/email address/i), 'jane@example.com');
+    await user.type(screen.getByLabelText(/^password/i), 'SecurePassword123');
+    await user.click(screen.getByTestId('login-submit-button'));
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent('Database connection failed.');
+    });
+  });
+
+  it('displays network error when login fetch rejects', async () => {
+    const user = userEvent.setup();
+
+    global.fetch = jest.fn().mockImplementation((url: string) => {
+      if (url.includes('/auth/me')) {
+        return Promise.resolve({
+          ok: false,
+          status: 401,
+          json: () => Promise.resolve({ error: { code: 'UNAUTHENTICATED' } }),
+        } as Response);
+      }
+      return Promise.reject(new Error('Failed to fetch'));
+    });
+
+    window.history.pushState({}, '', '/login');
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: /welcome back/i })).toBeInTheDocument();
+    });
+
+    await user.type(screen.getByLabelText(/email address/i), 'jane@example.com');
+    await user.type(screen.getByLabelText(/^password/i), 'SecurePassword123');
+    await user.click(screen.getByTestId('login-submit-button'));
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent(/failed to fetch/i);
+    });
+  });
+
+  it('displays field errors when server returns 400 validation error with details on login', async () => {
+    const user = userEvent.setup();
+
+    global.fetch = createMockFetch({
+      'GET /api/v1/auth/me': {
+        status: 401,
+        body: { error: { code: 'UNAUTHENTICATED' } },
+      },
+      'POST /api/v1/auth/login': {
+        status: 400,
+        body: {
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: 'Please correct the highlighted fields.',
+            details: [
+              { field: 'email', message: 'Email is invalid on server.' },
+              { field: 'password', message: 'Password is too long.' },
+            ],
+          },
+        },
+      },
+    });
+
+    window.history.pushState({}, '', '/login');
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: /welcome back/i })).toBeInTheDocument();
+    });
+
+    const emailInput = screen.getByLabelText(/email address/i);
+    const passwordInput = screen.getByLabelText(/^password/i);
+
+    await user.type(emailInput, 'jane@example.com');
+    await user.type(passwordInput, 'SecurePassword123');
+    await user.click(screen.getByTestId('login-submit-button'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Email is invalid on server.')).toBeInTheDocument();
+      expect(screen.getByText('Password is too long.')).toBeInTheDocument();
+    });
+
+    // Test clearing field errors on change
+    await user.type(emailInput, 'a');
+    expect(screen.queryByText('Email is invalid on server.')).not.toBeInTheDocument();
+
+    await user.type(passwordInput, 'b');
+    expect(screen.queryByText('Password is too long.')).not.toBeInTheDocument();
+  });
+
+  it('surfaces unmapped server validation error in top alert on login', async () => {
+    const user = userEvent.setup();
+
+    global.fetch = createMockFetch({
+      'GET /api/v1/auth/me': {
+        status: 401,
+        body: { error: { code: 'UNAUTHENTICATED' } },
+      },
+      'POST /api/v1/auth/login': {
+        status: 400,
+        body: {
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: 'Invalid payload shape.',
+            details: [{ field: 'body', message: 'Unexpected JSON root structure.' }],
+          },
+        },
+      },
+    });
+
+    window.history.pushState({}, '', '/login');
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: /welcome back/i })).toBeInTheDocument();
+    });
+
+    await user.type(screen.getByLabelText(/email address/i), 'jane@example.com');
+    await user.type(screen.getByLabelText(/^password/i), 'SecurePassword123');
+    await user.click(screen.getByTestId('login-submit-button'));
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent('Unexpected JSON root structure.');
+    });
+  });
+
+  it('enforces client-side validation rules on login form', async () => {
+    const user = userEvent.setup();
+
+    global.fetch = createMockFetch({
+      'GET /api/v1/auth/me': {
+        status: 401,
+        body: { error: { code: 'UNAUTHENTICATED' } },
+      },
+    });
+
+    window.history.pushState({}, '', '/login');
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: /welcome back/i })).toBeInTheDocument();
+    });
+
+    // 1. Submit empty
+    await user.click(screen.getByTestId('login-submit-button'));
+    expect(screen.getByText('Email address is required.')).toBeInTheDocument();
+    expect(screen.getByText('Password is required.')).toBeInTheDocument();
+
+    // 2. Invalid email format
+    const emailInput = screen.getByLabelText(/email address/i);
+    await user.type(emailInput, 'notanemail');
+    await user.click(screen.getByTestId('login-submit-button'));
+    expect(screen.getByText('Please enter a valid email address.')).toBeInTheDocument();
+  });
+
+  it('redirects to preserved safe from path and sanitizes open redirects on login', async () => {
+    const user = userEvent.setup();
+
+    global.fetch = createMockFetch({
+      'GET /api/v1/auth/me': {
+        status: 401,
+        body: { error: { code: 'UNAUTHENTICATED' } },
+      },
+      'POST /api/v1/auth/login': {
+        status: 200,
+        body: { data: { user: mockUser } },
+      },
+    });
+
+    // Valid internal relative path
+    window.history.pushState(
+      { from: { pathname: '/dashboard', search: '?view=compact' } },
+      '',
+      '/login',
+    );
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: /welcome back/i })).toBeInTheDocument();
+    });
+
+    await user.type(screen.getByLabelText(/email address/i), 'jane@example.com');
+    await user.type(screen.getByLabelText(/^password/i), 'SecurePassword123');
+    await user.click(screen.getByTestId('login-submit-button'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('dashboard-page')).toBeInTheDocument();
+    });
+  });
+
+  it('displays server error and field details on registration failure', async () => {
+    const user = userEvent.setup();
+
+    global.fetch = createMockFetch({
+      'GET /api/v1/auth/me': {
+        status: 401,
+        body: { error: { code: 'UNAUTHENTICATED' } },
+      },
+      'POST /api/v1/auth/register': {
+        status: 400,
+        body: {
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: 'Invalid inputs.',
+            details: [
+              { field: 'name', message: 'Name is taken.' },
+              { field: 'email', message: 'Domain is blocked.' },
+              { field: 'password', message: 'Password breached.' },
+              { field: 'body', message: 'Unrecognized registration parameter.' },
+            ],
+          },
+        },
+      },
+    });
+
+    window.history.pushState({}, '', '/register');
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: /create account/i })).toBeInTheDocument();
+    });
+
+    const nameInput = screen.getByLabelText(/full name/i);
+    const emailInput = screen.getByLabelText(/email address/i);
+    const passwordInput = screen.getByLabelText(/^password$/i, { selector: 'input' });
+
+    await user.type(nameInput, 'Jane Doe');
+    await user.type(emailInput, 'jane@example.com');
+    await user.type(passwordInput, 'SecurePassword123');
+    await user.click(screen.getByTestId('register-submit-button'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Name is taken.')).toBeInTheDocument();
+      expect(screen.getByText('Domain is blocked.')).toBeInTheDocument();
+      expect(screen.getByText('Password breached.')).toBeInTheDocument();
+      expect(screen.getByText('Unrecognized registration parameter.')).toBeInTheDocument();
+    });
+
+    // Test clearing field errors
+    await user.type(nameInput, 'a');
+    expect(screen.queryByText('Name is taken.')).not.toBeInTheDocument();
+
+    await user.type(emailInput, 'b');
+    expect(screen.queryByText('Domain is blocked.')).not.toBeInTheDocument();
+
+    await user.type(passwordInput, 'c');
+    expect(screen.queryByText('Password breached.')).not.toBeInTheDocument();
+  });
+
+  it('validates client-side inputs on registration form thoroughly', async () => {
+    const user = userEvent.setup();
+
+    global.fetch = createMockFetch({
+      'GET /api/v1/auth/me': {
+        status: 401,
+        body: { error: { code: 'UNAUTHENTICATED' } },
+      },
+    });
+
+    window.history.pushState({}, '', '/register');
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: /create account/i })).toBeInTheDocument();
+    });
+
+    const nameInput = screen.getByLabelText(/full name/i);
+    const emailInput = screen.getByLabelText(/email address/i);
+    const passwordInput = screen.getByLabelText(/^password$/i, { selector: 'input' });
+    const submitBtn = screen.getByTestId('register-submit-button');
+
+    // 1. All empty
+    await user.click(submitBtn);
+    expect(screen.getByText('Full name is required.')).toBeInTheDocument();
+    expect(screen.getByText('Email address is required.')).toBeInTheDocument();
+    expect(screen.getByText('Password is required.')).toBeInTheDocument();
+
+    // 2. Name < 2 characters
+    await user.type(nameInput, 'J');
+    await user.click(submitBtn);
+    expect(screen.getByText('Name must be at least 2 characters.')).toBeInTheDocument();
+
+    // 3. Password without mixed character classes
+    await user.clear(nameInput);
+    await user.type(nameInput, 'Jane Doe');
+    await user.type(emailInput, 'jane@example.com');
+    await user.type(passwordInput, 'alllowercaseletters');
+    await user.click(submitBtn);
+    expect(
+      screen.getByText('Password must contain uppercase, lowercase, and numeric characters.'),
+    ).toBeInTheDocument();
+  });
+
+  it('redirects already authenticated user from public routes /login and /register to /dashboard', async () => {
+    global.fetch = createMockFetch({
+      'GET /api/v1/auth/me': {
+        status: 200,
+        body: { data: { user: mockUser } },
+      },
+    });
+
+    window.history.pushState({}, '', '/login');
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('dashboard-page')).toBeInTheDocument();
+    });
+
+    expect(screen.getByTestId('user-greeting')).toHaveTextContent('Jane Doe');
+  });
+
+  it('handles session restoration failure (network / 500) and keeps user unauthenticated', async () => {
+    global.fetch = jest.fn().mockImplementation((url: string) => {
+      if (url.includes('/auth/me')) {
+        return Promise.reject(new Error('Network down'));
+      }
+      return Promise.resolve({ ok: false, status: 404 } as Response);
+    });
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: /welcome back/i })).toBeInTheDocument();
+    });
+
+    expect(screen.getByRole('button', { name: /sign in/i })).toBeInTheDocument();
+  });
+
+  it('clears session on logout even if server returns 500', async () => {
+    const user = userEvent.setup();
+
+    global.fetch = createMockFetch({
+      'GET /api/v1/auth/me': {
+        status: 200,
+        body: { data: { user: mockUser } },
+      },
+      'POST /api/v1/auth/logout': {
+        status: 500,
+        body: { error: { code: 'INTERNAL_ERROR', message: 'Logout failed on server' } },
+      },
+    });
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('dashboard-page')).toBeInTheDocument();
+    });
+
+    const logoutBtn = screen.getByTestId('logout-button');
+    await user.click(logoutBtn);
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: /welcome back/i })).toBeInTheDocument();
+    });
+
+    expect(screen.queryByTestId('user-greeting')).not.toBeInTheDocument();
+  });
 });

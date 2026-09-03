@@ -5,6 +5,7 @@ import { ApiClientError } from '../../../shared/api/client';
 import { Alert } from '../../../shared/components/Alert';
 import { Button } from '../../../shared/components/Button';
 import { Input } from '../../../shared/components/Input';
+import { getSafeRedirectPath } from '../../../shared/utils/routing';
 import { useAuth } from '../context/AuthContext';
 
 export const LoginForm = () => {
@@ -18,19 +19,20 @@ export const LoginForm = () => {
   const [formError, setFormError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
-  const from =
-    (location.state as { from?: { pathname: string } } | undefined)?.from?.pathname || '/dashboard';
-
   const validate = (): boolean => {
     const errors: Record<string, string> = {};
-    if (!email.trim()) {
+    const trimmedEmail = email.trim();
+
+    if (!trimmedEmail) {
       errors.email = 'Email address is required.';
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
       errors.email = 'Please enter a valid email address.';
     }
 
     if (!password) {
       errors.password = 'Password is required.';
+    } else if (password.length > 72) {
+      errors.password = 'Password must not exceed 72 characters.';
     }
 
     setFieldErrors(errors);
@@ -48,15 +50,27 @@ export const LoginForm = () => {
     setIsSubmitting(true);
     try {
       await login({ email: email.trim(), password });
-      navigate(from, { replace: true });
+      const safeTarget = getSafeRedirectPath(
+        (location.state as { from?: unknown } | undefined)?.from,
+        '/dashboard',
+      );
+      navigate(safeTarget, { replace: true });
     } catch (err: unknown) {
       if (err instanceof ApiClientError) {
         if (err.details && err.details.length > 0) {
           const mapped: Record<string, string> = {};
+          const unmapped: string[] = [];
           for (const item of err.details) {
-            mapped[item.field] = item.message;
+            if (item.field === 'email' || item.field === 'password') {
+              mapped[item.field] = item.message;
+            } else {
+              unmapped.push(item.message);
+            }
           }
           setFieldErrors(mapped);
+          if (unmapped.length > 0) {
+            setFormError(unmapped.join(' '));
+          }
         } else {
           setFormError(err.message);
         }
@@ -81,6 +95,7 @@ export const LoginForm = () => {
         label="Email Address"
         type="email"
         autoComplete="email"
+        maxLength={254}
         value={email}
         onChange={(e) => {
           setEmail(e.target.value);
@@ -98,6 +113,7 @@ export const LoginForm = () => {
         label="Password"
         type="password"
         autoComplete="current-password"
+        maxLength={72}
         value={password}
         onChange={(e) => {
           setPassword(e.target.value);

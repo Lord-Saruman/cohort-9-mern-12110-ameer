@@ -31,10 +31,14 @@ export interface RequestOptions extends Omit<RequestInit, 'body'> {
 }
 
 const getApiBaseUrl = (): string => {
-  const env =
-    typeof process !== 'undefined' && process.env?.VITE_API_URL
-      ? process.env.VITE_API_URL
-      : '/api/v1';
+  let env: string | undefined;
+
+  try {
+    // In Node/Jest, process is defined. In Vite, process.env.VITE_API_URL is statically inlined via define.
+    env = process.env.VITE_API_URL;
+  } catch {
+    env = undefined;
+  }
 
   if (typeof env === 'string' && env.length > 0) {
     return env.replace(/\/+$/, '');
