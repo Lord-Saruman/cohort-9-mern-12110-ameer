@@ -3,7 +3,12 @@ import type { Pool } from 'mysql2/promise';
 
 import { AppError } from '../../common/app-error';
 import type { AppLocals } from '../../middleware/request-context';
-import { createNoteSchema, listNotesQuerySchema, updateNoteSchema } from './notes.schemas';
+import {
+  createNoteSchema,
+  listNotesQuerySchema,
+  noteIdParamSchema,
+  updateNoteSchema,
+} from './notes.schemas';
 import {
   createNoteService,
   deleteNoteService,
@@ -97,8 +102,21 @@ export const createNotesController = ({ pool }: NotesControllerOptions): NotesCo
     next,
   ) => {
     try {
+      const paramParsed = noteIdParamSchema.safeParse(request.params);
+      if (!paramParsed.success) {
+        throw new AppError({
+          statusCode: 400,
+          code: 'VALIDATION_ERROR',
+          message: 'Invalid note identifier format.',
+          details: paramParsed.error.issues.map((issue) => ({
+            field: 'noteId',
+            message: issue.message,
+          })),
+        });
+      }
+
       const userId = getAuthenticatedUserId(response);
-      const note = await getNoteByIdService(pool, request.params.noteId, userId);
+      const note = await getNoteByIdService(pool, paramParsed.data.noteId, userId);
       response.status(200).json({ data: note });
     } catch (error: unknown) {
       next(error);
@@ -111,6 +129,19 @@ export const createNotesController = ({ pool }: NotesControllerOptions): NotesCo
     next,
   ) => {
     try {
+      const paramParsed = noteIdParamSchema.safeParse(request.params);
+      if (!paramParsed.success) {
+        throw new AppError({
+          statusCode: 400,
+          code: 'VALIDATION_ERROR',
+          message: 'Invalid note identifier format.',
+          details: paramParsed.error.issues.map((issue) => ({
+            field: 'noteId',
+            message: issue.message,
+          })),
+        });
+      }
+
       const parsed = updateNoteSchema.safeParse(request.body);
       if (!parsed.success) {
         throw new AppError({
@@ -125,7 +156,7 @@ export const createNotesController = ({ pool }: NotesControllerOptions): NotesCo
       }
 
       const userId = getAuthenticatedUserId(response);
-      const note = await updateNoteService(pool, request.params.noteId, userId, parsed.data);
+      const note = await updateNoteService(pool, paramParsed.data.noteId, userId, parsed.data);
       response.status(200).json({ data: note });
     } catch (error: unknown) {
       next(error);
@@ -140,8 +171,21 @@ export const createNotesController = ({ pool }: NotesControllerOptions): NotesCo
     AppLocals
   > = async (request, response, next) => {
     try {
+      const paramParsed = noteIdParamSchema.safeParse(request.params);
+      if (!paramParsed.success) {
+        throw new AppError({
+          statusCode: 400,
+          code: 'VALIDATION_ERROR',
+          message: 'Invalid note identifier format.',
+          details: paramParsed.error.issues.map((issue) => ({
+            field: 'noteId',
+            message: issue.message,
+          })),
+        });
+      }
+
       const userId = getAuthenticatedUserId(response);
-      await deleteNoteService(pool, request.params.noteId, userId);
+      await deleteNoteService(pool, paramParsed.data.noteId, userId);
       response.status(204).end();
     } catch (error: unknown) {
       next(error);

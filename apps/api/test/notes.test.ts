@@ -72,10 +72,15 @@ const createFakePool = (): Pool => {
       const [userId, searchTitle, searchContent] = params as [string, string?, string?];
       let filtered = notes.filter((n) => n.user_id === userId);
       if (searchTitle && searchContent) {
-        const query = searchTitle.replace(/%/g, '').toLowerCase();
+        // Strip leading/trailing wildcards and unescape backslash escapes for literal matching
+        const rawPattern = searchTitle
+          .slice(1, -1)
+          .replace(/\\([%_\\])/g, '$1')
+          .toLowerCase();
         filtered = filtered.filter(
           (n) =>
-            n.title.toLowerCase().includes(query) || n.content_text.toLowerCase().includes(query),
+            n.title.toLowerCase().includes(rawPattern) ||
+            n.content_text.toLowerCase().includes(rawPattern),
         );
       }
       const countRow = [{ total: filtered.length }] as unknown as RowDataPacket[];
@@ -103,12 +108,15 @@ const createFakePool = (): Pool => {
             number,
             number,
           ];
-          const query = searchTitle.replace(/%/g, '').toLowerCase();
+          const rawPattern = searchTitle
+            .slice(1, -1)
+            .replace(/\\([%_\\])/g, '$1')
+            .toLowerCase();
           userNotes = notes.filter(
             (n) =>
               n.user_id === userId &&
-              (n.title.toLowerCase().includes(query) ||
-                n.content_text.toLowerCase().includes(query)),
+              (n.title.toLowerCase().includes(rawPattern) ||
+                n.content_text.toLowerCase().includes(rawPattern)),
           );
           limit = pageSize;
           offset = skip;
@@ -174,7 +182,7 @@ const createFakePool = (): Pool => {
 };
 
 describe('Notes routes and ownership isolation', () => {
-  const jwtSecret = 'test-secret-key-12345';
+  const jwtSecret = 'test-secret-key-12345-long-enough-32-chars';
 
   const registerUserHelper = async (
     app: ReturnType<typeof createApp>,
@@ -183,7 +191,7 @@ describe('Notes routes and ownership isolation', () => {
   ): Promise<string> => {
     const res = await request(app)
       .post('/api/v1/auth/register')
-      .send({ name, email, password: 'securePassword123' })
+      .send({ name, email, password: 'SecurePassword123' })
       .expect(201);
 
     const cookieHeader = res.headers['set-cookie']?.[0];
@@ -198,35 +206,118 @@ describe('Notes routes and ownership isolation', () => {
       jwtSecret,
     });
 
-    try {
-      const cookie = await registerUserHelper(app, 'Alice', 'alice@example.com');
-      const response = await request(app)
-        .post('/api/v1/notes')
-        .set('Cookie', cookie)
-        .send({
-          title: 'Sprint Planning',
-          content: {
-            type: 'doc',
-            content: [
-              {
-                type: 'paragraph',
-                content: [{ type: 'text', text: 'Define deliverables for sprint.' }],
-              },
-            ],
-          },
-        })
-        .expect(201);
+    const cookie = await registerUserHelper(app, 'Alice', 'alice@example.com');
+    const response = await request(app)
+      .post('/api/v1/notes')
+      .set('Cookie', cookie)
+      .send({
+        title: 'Sprint Planning',
+        content: {
+          type: 'doc',
+          content: [
+            {
+              type: 'paragraph',
+              content: [{ type: 'text', text: 'Define deliverables for sprint.' }],
+            },
+          ],
+        },
+      })
+      .expect(201);
 
-      expect(response.body.data.title).to.equal('Sprint Planning');
-      expect(response.body.data).to.have.property('id');
-      expect(response.body.data).to.have.property('content');
-      expect(response.body.data).to.have.property('createdAt');
-      expect(response.body.data).to.have.property('updatedAt');
-      expect(response.body.data).to.not.have.property('userId');
-      expect(response.body.data).to.not.have.property('user_id');
-    } catch (error: unknown) {
-      expect.fail(error instanceof Error ? error.message : String(error));
-    }
+    expect(response.body.data.title).to.equal('Sprint Planning');
+    expect(response.body.data).to.have.property('id');
+    expect(response.body.data).to.have.property('content');
+    expect(response.body.data).to.have.property('createdAt');
+    expect(response.body.data).to.have.property('updatedAt');
+    expect(response.body.data).to.not.have.property('userId');
+    expect(response.body.data).to.not.have.property('user_id');
+  });
+
+  it('rejects note creation when content is not a doc structure with 400 validation error', async () => {
+    const pool = createFakePool();
+    const app = createApp({
+      clientOrigin: 'http://localhost:5173',
+      databasePool: pool,
+      jwtSecret,
+    });
+
+    const cookie = await registerUserHelper(app, 'Alice', 'alice@example.com');
+
+    // Missing type: "doc"
+    const resEmpty = await request(app)
+      .post('/api/v1/notes')
+      .set('Cookie', cookie)
+      .send({ title: 'Invalid Doc', content: {} })
+      .expect(400);
+    expect(resEmpty.body.error.code).to.equal('VALIDATION_ERROR');
+
+    // Wrong root type
+    const resWrongType = await request(app)
+      .post('/api/v1/notes')
+      .set('Cookie', cookie)
+      .send({ title: 'Invalid Doc', content: { type: 'paragraph' } })
+      .expect(400);
+    expect(resWrongType.body.error.code).to.equal('VALIDATION_ERROR');
+  });
+
+  it('rejects note creation when serialized content exceeds 100 KB with 400 validation error', async () => {
+    const pool = createFakePool();
+    const app = createApp({
+      clientOrigin: 'http://localhost:5173',
+      databasePool: pool,
+      jwtSecret,
+    });
+
+    const cookie = await registerUserHelper(app, 'Alice', 'alice@example.com');
+    const oversizedContent = {
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [{ type: 'text', text: 'x'.repeat(101 * 1024) }],
+        },
+      ],
+    };
+
+    const res = await request(app)
+      .post('/api/v1/notes')
+      .set('Cookie', cookie)
+      .send({ title: 'Huge Note', content: oversizedContent });
+
+    // Body parser may reject with 413 or schema validates with 400
+    expect([400, 413]).to.include(res.status);
+  });
+
+  it('ignores client-supplied contentText and derives it exclusively on server', async () => {
+    const pool = createFakePool();
+    const app = createApp({
+      clientOrigin: 'http://localhost:5173',
+      databasePool: pool,
+      jwtSecret,
+    });
+
+    const cookie = await registerUserHelper(app, 'Alice', 'alice@example.com');
+    await request(app)
+      .post('/api/v1/notes')
+      .set('Cookie', cookie)
+      .send({
+        title: 'Derived Text Note',
+        content: {
+          type: 'doc',
+          content: [
+            {
+              type: 'paragraph',
+              content: [{ type: 'text', text: 'Real text from doc' }],
+            },
+          ],
+        },
+        contentText: 'Injected fake summary',
+      })
+      .expect(201);
+
+    const listRes = await request(app).get('/api/v1/notes').set('Cookie', cookie).expect(200);
+    expect(listRes.body.data[0].preview).to.equal('Real text from doc');
+    expect(listRes.body.data[0].preview).to.not.include('Injected fake summary');
   });
 
   it('retrieves an existing note by id for the owner', async () => {
@@ -237,28 +328,41 @@ describe('Notes routes and ownership isolation', () => {
       jwtSecret,
     });
 
-    try {
-      const cookie = await registerUserHelper(app, 'Alice', 'alice@example.com');
-      const createRes = await request(app)
-        .post('/api/v1/notes')
-        .set('Cookie', cookie)
-        .send({
-          title: 'Design Review',
-          content: { type: 'doc', content: [] },
-        })
-        .expect(201);
+    const cookie = await registerUserHelper(app, 'Alice', 'alice@example.com');
+    const createRes = await request(app)
+      .post('/api/v1/notes')
+      .set('Cookie', cookie)
+      .send({
+        title: 'Design Review',
+        content: { type: 'doc', content: [] },
+      })
+      .expect(201);
 
-      const noteId = createRes.body.data.id;
-      const getRes = await request(app)
-        .get(`/api/v1/notes/${noteId}`)
-        .set('Cookie', cookie)
-        .expect(200);
+    const noteId = createRes.body.data.id;
+    const getRes = await request(app)
+      .get(`/api/v1/notes/${noteId}`)
+      .set('Cookie', cookie)
+      .expect(200);
 
-      expect(getRes.body.data.id).to.equal(noteId);
-      expect(getRes.body.data.title).to.equal('Design Review');
-    } catch (error: unknown) {
-      expect.fail(error instanceof Error ? error.message : String(error));
-    }
+    expect(getRes.body.data.id).to.equal(noteId);
+    expect(getRes.body.data.title).to.equal('Design Review');
+  });
+
+  it('rejects invalid UUID noteId with 400 validation error', async () => {
+    const pool = createFakePool();
+    const app = createApp({
+      clientOrigin: 'http://localhost:5173',
+      databasePool: pool,
+      jwtSecret,
+    });
+
+    const cookie = await registerUserHelper(app, 'Alice', 'alice@example.com');
+    const res = await request(app)
+      .get('/api/v1/notes/not-a-valid-uuid')
+      .set('Cookie', cookie)
+      .expect(400);
+
+    expect(res.body.error.code).to.equal('VALIDATION_ERROR');
   });
 
   it('returns 404 when retrieving a note belonging to another user', async () => {
@@ -269,31 +373,27 @@ describe('Notes routes and ownership isolation', () => {
       jwtSecret,
     });
 
-    try {
-      const aliceCookie = await registerUserHelper(app, 'Alice', 'alice@example.com');
-      const bobCookie = await registerUserHelper(app, 'Bob', 'bob@example.com');
+    const aliceCookie = await registerUserHelper(app, 'Alice', 'alice@example.com');
+    const bobCookie = await registerUserHelper(app, 'Bob', 'bob@example.com');
 
-      const createRes = await request(app)
-        .post('/api/v1/notes')
-        .set('Cookie', aliceCookie)
-        .send({
-          title: 'Alice Private Notes',
-          content: { type: 'doc', content: [] },
-        })
-        .expect(201);
+    const createRes = await request(app)
+      .post('/api/v1/notes')
+      .set('Cookie', aliceCookie)
+      .send({
+        title: 'Alice Private Notes',
+        content: { type: 'doc', content: [] },
+      })
+      .expect(201);
 
-      const noteId = createRes.body.data.id;
+    const noteId = createRes.body.data.id;
 
-      const getRes = await request(app)
-        .get(`/api/v1/notes/${noteId}`)
-        .set('Cookie', bobCookie)
-        .expect(404);
+    const getRes = await request(app)
+      .get(`/api/v1/notes/${noteId}`)
+      .set('Cookie', bobCookie)
+      .expect(404);
 
-      expect(getRes.body.error.code).to.equal('NOT_FOUND');
-      expect(getRes.body.error.message).to.equal('Note not found.');
-    } catch (error: unknown) {
-      expect.fail(error instanceof Error ? error.message : String(error));
-    }
+    expect(getRes.body.error.code).to.equal('NOT_FOUND');
+    expect(getRes.body.error.message).to.equal('Note not found.');
   });
 
   it('updates a note for the owner', async () => {
@@ -304,29 +404,25 @@ describe('Notes routes and ownership isolation', () => {
       jwtSecret,
     });
 
-    try {
-      const cookie = await registerUserHelper(app, 'Alice', 'alice@example.com');
-      const createRes = await request(app)
-        .post('/api/v1/notes')
-        .set('Cookie', cookie)
-        .send({
-          title: 'Draft Note',
-          content: { type: 'doc', content: [] },
-        })
-        .expect(201);
+    const cookie = await registerUserHelper(app, 'Alice', 'alice@example.com');
+    const createRes = await request(app)
+      .post('/api/v1/notes')
+      .set('Cookie', cookie)
+      .send({
+        title: 'Draft Note',
+        content: { type: 'doc', content: [] },
+      })
+      .expect(201);
 
-      const noteId = createRes.body.data.id;
+    const noteId = createRes.body.data.id;
 
-      const updateRes = await request(app)
-        .patch(`/api/v1/notes/${noteId}`)
-        .set('Cookie', cookie)
-        .send({ title: 'Finalized Note' })
-        .expect(200);
+    const updateRes = await request(app)
+      .patch(`/api/v1/notes/${noteId}`)
+      .set('Cookie', cookie)
+      .send({ title: 'Finalized Note' })
+      .expect(200);
 
-      expect(updateRes.body.data.title).to.equal('Finalized Note');
-    } catch (error: unknown) {
-      expect.fail(error instanceof Error ? error.message : String(error));
-    }
+    expect(updateRes.body.data.title).to.equal('Finalized Note');
   });
 
   it('returns 404 when updating a note belonging to another user', async () => {
@@ -337,31 +433,27 @@ describe('Notes routes and ownership isolation', () => {
       jwtSecret,
     });
 
-    try {
-      const aliceCookie = await registerUserHelper(app, 'Alice', 'alice@example.com');
-      const bobCookie = await registerUserHelper(app, 'Bob', 'bob@example.com');
+    const aliceCookie = await registerUserHelper(app, 'Alice', 'alice@example.com');
+    const bobCookie = await registerUserHelper(app, 'Bob', 'bob@example.com');
 
-      const createRes = await request(app)
-        .post('/api/v1/notes')
-        .set('Cookie', aliceCookie)
-        .send({
-          title: 'Alice Secret',
-          content: { type: 'doc', content: [] },
-        })
-        .expect(201);
+    const createRes = await request(app)
+      .post('/api/v1/notes')
+      .set('Cookie', aliceCookie)
+      .send({
+        title: 'Alice Secret',
+        content: { type: 'doc', content: [] },
+      })
+      .expect(201);
 
-      const noteId = createRes.body.data.id;
+    const noteId = createRes.body.data.id;
 
-      const updateRes = await request(app)
-        .patch(`/api/v1/notes/${noteId}`)
-        .set('Cookie', bobCookie)
-        .send({ title: 'Tampered' })
-        .expect(404);
+    const updateRes = await request(app)
+      .patch(`/api/v1/notes/${noteId}`)
+      .set('Cookie', bobCookie)
+      .send({ title: 'Tampered' })
+      .expect(404);
 
-      expect(updateRes.body.error.code).to.equal('NOT_FOUND');
-    } catch (error: unknown) {
-      expect.fail(error instanceof Error ? error.message : String(error));
-    }
+    expect(updateRes.body.error.code).to.equal('NOT_FOUND');
   });
 
   it('deletes a note for the owner', async () => {
@@ -372,25 +464,21 @@ describe('Notes routes and ownership isolation', () => {
       jwtSecret,
     });
 
-    try {
-      const cookie = await registerUserHelper(app, 'Alice', 'alice@example.com');
-      const createRes = await request(app)
-        .post('/api/v1/notes')
-        .set('Cookie', cookie)
-        .send({
-          title: 'Temporary Note',
-          content: { type: 'doc', content: [] },
-        })
-        .expect(201);
+    const cookie = await registerUserHelper(app, 'Alice', 'alice@example.com');
+    const createRes = await request(app)
+      .post('/api/v1/notes')
+      .set('Cookie', cookie)
+      .send({
+        title: 'Temporary Note',
+        content: { type: 'doc', content: [] },
+      })
+      .expect(201);
 
-      const noteId = createRes.body.data.id;
+    const noteId = createRes.body.data.id;
 
-      await request(app).delete(`/api/v1/notes/${noteId}`).set('Cookie', cookie).expect(204);
+    await request(app).delete(`/api/v1/notes/${noteId}`).set('Cookie', cookie).expect(204);
 
-      await request(app).get(`/api/v1/notes/${noteId}`).set('Cookie', cookie).expect(404);
-    } catch (error: unknown) {
-      expect.fail(error instanceof Error ? error.message : String(error));
-    }
+    await request(app).get(`/api/v1/notes/${noteId}`).set('Cookie', cookie).expect(404);
   });
 
   it('returns 404 when deleting a note belonging to another user', async () => {
@@ -401,27 +489,23 @@ describe('Notes routes and ownership isolation', () => {
       jwtSecret,
     });
 
-    try {
-      const aliceCookie = await registerUserHelper(app, 'Alice', 'alice@example.com');
-      const bobCookie = await registerUserHelper(app, 'Bob', 'bob@example.com');
+    const aliceCookie = await registerUserHelper(app, 'Alice', 'alice@example.com');
+    const bobCookie = await registerUserHelper(app, 'Bob', 'bob@example.com');
 
-      const createRes = await request(app)
-        .post('/api/v1/notes')
-        .set('Cookie', aliceCookie)
-        .send({
-          title: 'Alice Untouchable Note',
-          content: { type: 'doc', content: [] },
-        })
-        .expect(201);
+    const createRes = await request(app)
+      .post('/api/v1/notes')
+      .set('Cookie', aliceCookie)
+      .send({
+        title: 'Alice Untouchable Note',
+        content: { type: 'doc', content: [] },
+      })
+      .expect(201);
 
-      const noteId = createRes.body.data.id;
+    const noteId = createRes.body.data.id;
 
-      await request(app).delete(`/api/v1/notes/${noteId}`).set('Cookie', bobCookie).expect(404);
+    await request(app).delete(`/api/v1/notes/${noteId}`).set('Cookie', bobCookie).expect(404);
 
-      await request(app).get(`/api/v1/notes/${noteId}`).set('Cookie', aliceCookie).expect(200);
-    } catch (error: unknown) {
-      expect.fail(error instanceof Error ? error.message : String(error));
-    }
+    await request(app).get(`/api/v1/notes/${noteId}`).set('Cookie', aliceCookie).expect(200);
   });
 
   it('rejects unauthenticated requests to notes endpoints with 401', async () => {
@@ -432,12 +516,8 @@ describe('Notes routes and ownership isolation', () => {
       jwtSecret,
     });
 
-    try {
-      const response = await request(app).get('/api/v1/notes').expect(401);
-      expect(response.body.error.code).to.equal('UNAUTHENTICATED');
-    } catch (error: unknown) {
-      expect.fail(error instanceof Error ? error.message : String(error));
-    }
+    const response = await request(app).get('/api/v1/notes').expect(401);
+    expect(response.body.error.code).to.equal('UNAUTHENTICATED');
   });
 
   it('validates note creation input with 400 validation error', async () => {
@@ -448,19 +528,15 @@ describe('Notes routes and ownership isolation', () => {
       jwtSecret,
     });
 
-    try {
-      const cookie = await registerUserHelper(app, 'Alice', 'alice@example.com');
-      const response = await request(app)
-        .post('/api/v1/notes')
-        .set('Cookie', cookie)
-        .send({ title: '', content: { type: 'doc' } })
-        .expect(400);
+    const cookie = await registerUserHelper(app, 'Alice', 'alice@example.com');
+    const response = await request(app)
+      .post('/api/v1/notes')
+      .set('Cookie', cookie)
+      .send({ title: '', content: { type: 'doc' } })
+      .expect(400);
 
-      expect(response.body.error.code).to.equal('VALIDATION_ERROR');
-      expect(response.body.error.details).to.be.an('array');
-    } catch (error: unknown) {
-      expect.fail(error instanceof Error ? error.message : String(error));
-    }
+    expect(response.body.error.code).to.equal('VALIDATION_ERROR');
+    expect(response.body.error.details).to.be.an('array');
   });
 
   it('validates note update input with 400 validation error when empty payload sent', async () => {
@@ -471,28 +547,24 @@ describe('Notes routes and ownership isolation', () => {
       jwtSecret,
     });
 
-    try {
-      const cookie = await registerUserHelper(app, 'Alice', 'alice@example.com');
-      const createRes = await request(app)
-        .post('/api/v1/notes')
-        .set('Cookie', cookie)
-        .send({
-          title: 'Valid Note',
-          content: { type: 'doc' },
-        })
-        .expect(201);
+    const cookie = await registerUserHelper(app, 'Alice', 'alice@example.com');
+    const createRes = await request(app)
+      .post('/api/v1/notes')
+      .set('Cookie', cookie)
+      .send({
+        title: 'Valid Note',
+        content: { type: 'doc' },
+      })
+      .expect(201);
 
-      const noteId = createRes.body.data.id;
-      const response = await request(app)
-        .patch(`/api/v1/notes/${noteId}`)
-        .set('Cookie', cookie)
-        .send({})
-        .expect(400);
+    const noteId = createRes.body.data.id;
+    const response = await request(app)
+      .patch(`/api/v1/notes/${noteId}`)
+      .set('Cookie', cookie)
+      .send({})
+      .expect(400);
 
-      expect(response.body.error.code).to.equal('VALIDATION_ERROR');
-    } catch (error: unknown) {
-      expect.fail(error instanceof Error ? error.message : String(error));
-    }
+    expect(response.body.error.code).to.equal('VALIDATION_ERROR');
   });
 
   it('lists only the authenticated user notes with pagination metadata', async () => {
@@ -503,46 +575,42 @@ describe('Notes routes and ownership isolation', () => {
       jwtSecret,
     });
 
-    try {
-      const aliceCookie = await registerUserHelper(app, 'Alice', 'alice@example.com');
-      const bobCookie = await registerUserHelper(app, 'Bob', 'bob@example.com');
+    const aliceCookie = await registerUserHelper(app, 'Alice', 'alice@example.com');
+    const bobCookie = await registerUserHelper(app, 'Bob', 'bob@example.com');
 
-      await request(app)
-        .post('/api/v1/notes')
-        .set('Cookie', aliceCookie)
-        .send({ title: 'Alice Note 1', content: { type: 'doc' } })
-        .expect(201);
+    await request(app)
+      .post('/api/v1/notes')
+      .set('Cookie', aliceCookie)
+      .send({ title: 'Alice Note 1', content: { type: 'doc' } })
+      .expect(201);
 
-      await request(app)
-        .post('/api/v1/notes')
-        .set('Cookie', aliceCookie)
-        .send({ title: 'Alice Note 2', content: { type: 'doc' } })
-        .expect(201);
+    await request(app)
+      .post('/api/v1/notes')
+      .set('Cookie', aliceCookie)
+      .send({ title: 'Alice Note 2', content: { type: 'doc' } })
+      .expect(201);
 
-      await request(app)
-        .post('/api/v1/notes')
-        .set('Cookie', aliceCookie)
-        .send({ title: 'Alice Note 3', content: { type: 'doc' } })
-        .expect(201);
+    await request(app)
+      .post('/api/v1/notes')
+      .set('Cookie', aliceCookie)
+      .send({ title: 'Alice Note 3', content: { type: 'doc' } })
+      .expect(201);
 
-      await request(app)
-        .post('/api/v1/notes')
-        .set('Cookie', bobCookie)
-        .send({ title: 'Bob Note 1', content: { type: 'doc' } })
-        .expect(201);
+    await request(app)
+      .post('/api/v1/notes')
+      .set('Cookie', bobCookie)
+      .send({ title: 'Bob Note 1', content: { type: 'doc' } })
+      .expect(201);
 
-      const listRes = await request(app)
-        .get('/api/v1/notes?page=1&pageSize=2')
-        .set('Cookie', aliceCookie)
-        .expect(200);
+    const listRes = await request(app)
+      .get('/api/v1/notes?page=1&pageSize=2')
+      .set('Cookie', aliceCookie)
+      .expect(200);
 
-      expect(listRes.body.data).to.have.lengthOf(2);
-      expect(listRes.body.meta.total).to.equal(3);
-      expect(listRes.body.meta.page).to.equal(1);
-      expect(listRes.body.meta.pageSize).to.equal(2);
-    } catch (error: unknown) {
-      expect.fail(error instanceof Error ? error.message : String(error));
-    }
+    expect(listRes.body.data).to.have.lengthOf(2);
+    expect(listRes.body.meta.total).to.equal(3);
+    expect(listRes.body.meta.page).to.equal(1);
+    expect(listRes.body.meta.pageSize).to.equal(2);
   });
 
   it('filters notes by search query q across title and content preview', async () => {
@@ -553,42 +621,82 @@ describe('Notes routes and ownership isolation', () => {
       jwtSecret,
     });
 
-    try {
-      const cookie = await registerUserHelper(app, 'Alice', 'alice@example.com');
+    const cookie = await registerUserHelper(app, 'Alice', 'alice@example.com');
 
-      await request(app)
-        .post('/api/v1/notes')
-        .set('Cookie', cookie)
-        .send({
-          title: 'Project Roadmap',
-          content: {
-            type: 'doc',
-            content: [{ type: 'text', text: 'Q3 planning details' }],
-          },
-        })
-        .expect(201);
+    await request(app)
+      .post('/api/v1/notes')
+      .set('Cookie', cookie)
+      .send({
+        title: 'Project Roadmap',
+        content: {
+          type: 'doc',
+          content: [
+            { type: 'paragraph', content: [{ type: 'text', text: 'Q3 planning details' }] },
+          ],
+        },
+      })
+      .expect(201);
 
-      await request(app)
-        .post('/api/v1/notes')
-        .set('Cookie', cookie)
-        .send({
-          title: 'Weekly Grocery List',
-          content: {
-            type: 'doc',
-            content: [{ type: 'text', text: 'Apples, Milk, Bread' }],
-          },
-        })
-        .expect(201);
+    await request(app)
+      .post('/api/v1/notes')
+      .set('Cookie', cookie)
+      .send({
+        title: 'Weekly Grocery List',
+        content: {
+          type: 'doc',
+          content: [
+            { type: 'paragraph', content: [{ type: 'text', text: 'Apples, Milk, Bread' }] },
+          ],
+        },
+      })
+      .expect(201);
 
-      const searchRes = await request(app)
-        .get('/api/v1/notes?q=Roadmap')
-        .set('Cookie', cookie)
-        .expect(200);
+    const searchRes = await request(app)
+      .get('/api/v1/notes?q=Roadmap')
+      .set('Cookie', cookie)
+      .expect(200);
 
-      expect(searchRes.body.data).to.have.lengthOf(1);
-      expect(searchRes.body.data[0].title).to.equal('Project Roadmap');
-    } catch (error: unknown) {
-      expect.fail(error instanceof Error ? error.message : String(error));
-    }
+    expect(searchRes.body.data).to.have.lengthOf(1);
+    expect(searchRes.body.data[0].title).to.equal('Project Roadmap');
+  });
+
+  it('treats LIKE wildcards literally in search queries', async () => {
+    const pool = createFakePool();
+    const app = createApp({
+      clientOrigin: 'http://localhost:5173',
+      databasePool: pool,
+      jwtSecret,
+    });
+
+    const cookie = await registerUserHelper(app, 'Alice', 'alice@example.com');
+
+    // Note with 100% discount
+    await request(app)
+      .post('/api/v1/notes')
+      .set('Cookie', cookie)
+      .send({
+        title: 'Discount 100% off',
+        content: { type: 'doc', content: [] },
+      })
+      .expect(201);
+
+    // Another note without %
+    await request(app)
+      .post('/api/v1/notes')
+      .set('Cookie', cookie)
+      .send({
+        title: 'Discount 100 off',
+        content: { type: 'doc', content: [] },
+      })
+      .expect(201);
+
+    // Search explicitly for '100%' - should only match 'Discount 100% off'
+    const searchRes = await request(app)
+      .get('/api/v1/notes?q=100%')
+      .set('Cookie', cookie)
+      .expect(200);
+
+    expect(searchRes.body.data).to.have.lengthOf(1);
+    expect(searchRes.body.data[0].title).to.equal('Discount 100% off');
   });
 });

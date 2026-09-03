@@ -1,4 +1,10 @@
-import { Router, type Request, type Response, type NextFunction, type RequestHandler } from 'express';
+import {
+  Router,
+  type Request,
+  type Response,
+  type NextFunction,
+  type RequestHandler,
+} from 'express';
 
 import type { AppLocals } from '../../middleware/request-context';
 import { createRequireAuth } from '../../middleware/auth.middleware';
@@ -14,10 +20,7 @@ interface RateLimitEntry {
   resetAt: number;
 }
 
-export const createRateLimiter = (options: {
-  max: number;
-  windowMs: number;
-}): RequestHandler => {
+export const createRateLimiter = (options: { max: number; windowMs: number }): RequestHandler => {
   const hits = new Map<string, RateLimitEntry>();
 
   return (request: Request, response: Response, next: NextFunction): void => {

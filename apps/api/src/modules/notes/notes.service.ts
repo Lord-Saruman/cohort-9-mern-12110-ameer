@@ -27,7 +27,7 @@ export const createNoteService = async (
   input: CreateNoteInput,
 ): Promise<NoteDto> => {
   const id = randomUUID();
-  const contentText = input.contentText ?? extractPlainText(input.content);
+  const contentText = extractPlainText(input.content);
 
   const record = await createNote(pool, {
     id,
@@ -93,12 +93,7 @@ export const updateNoteService = async (
     });
   }
 
-  const contentText =
-    input.contentText !== undefined
-      ? input.contentText
-      : input.content !== undefined
-        ? extractPlainText(input.content)
-        : undefined;
+  const contentText = input.content !== undefined ? extractPlainText(input.content) : undefined;
 
   const updated = await updateNote(pool, id, userId, {
     title: input.title,

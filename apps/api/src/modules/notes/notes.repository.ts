@@ -26,6 +26,12 @@ export interface ListNotesOptions {
   pageSize: number;
 }
 
+/**
+ * Escapes characters that have special meaning in MySQL LIKE patterns (% and _)
+ * to treat user search inputs as literal strings.
+ */
+export const escapeLikeWildcards = (term: string): string => term.replace(/([\\%_])/g, '\\$1');
+
 export const createNote = async (pool: Pool, data: CreateNoteData): Promise<NoteRecord> => {
   await pool.execute(
     'INSERT INTO notes (id, user_id, title, content_json, content_text) VALUES (?, ?, ?, ?, ?)',
@@ -65,14 +71,15 @@ export const listNotesByUserId = async (
   const offset = (options.page - 1) * options.pageSize;
 
   if (options.search && options.search.length > 0) {
-    const searchPattern = `%${options.search}%`;
+    const escapedSearch = escapeLikeWildcards(options.search);
+    const searchPattern = `%${escapedSearch}%`;
 
     const [countRows] = await pool.execute<CountRow[]>(
       'SELECT COUNT(*) AS total FROM notes WHERE user_id = ? AND (title LIKE ? OR content_text LIKE ?)',
       [userId, searchPattern, searchPattern],
     );
 
-    const [rows] = await pool.query<NoteRow[]>(
+    const [rows] = await pool.execute<NoteRow[]>(
       'SELECT id, user_id, title, content_json, content_text, created_at, updated_at FROM notes WHERE user_id = ? AND (title LIKE ? OR content_text LIKE ?) ORDER BY updated_at DESC LIMIT ? OFFSET ?',
       [userId, searchPattern, searchPattern, options.pageSize, offset],
     );
@@ -88,7 +95,7 @@ export const listNotesByUserId = async (
     [userId],
   );
 
-  const [rows] = await pool.query<NoteRow[]>(
+  const [rows] = await pool.execute<NoteRow[]>(
     'SELECT id, user_id, title, content_json, content_text, created_at, updated_at FROM notes WHERE user_id = ? ORDER BY updated_at DESC LIMIT ? OFFSET ?',
     [userId, options.pageSize, offset],
   );

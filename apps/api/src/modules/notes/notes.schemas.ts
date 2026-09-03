@@ -1,13 +1,46 @@
 import { z } from 'zod';
 
+const MAX_SERIALIZED_CONTENT_BYTES = 100 * 1024; // 100 KB
+
+const tipTapNodeSchema: z.ZodType<unknown> = z.lazy(() =>
+  z
+    .object({
+      type: z.string().min(1),
+      content: z.array(tipTapNodeSchema).optional(),
+      text: z.string().optional(),
+      attrs: z.record(z.unknown()).optional(),
+      marks: z.array(z.record(z.unknown())).optional(),
+    })
+    .passthrough(),
+);
+
+export const noteContentSchema = z
+  .object({
+    type: z.literal('doc'),
+    content: z.array(tipTapNodeSchema).optional(),
+  })
+  .passthrough()
+  .refine(
+    (doc) => {
+      try {
+        const serialized = JSON.stringify(doc);
+        return Buffer.byteLength(serialized, 'utf8') <= MAX_SERIALIZED_CONTENT_BYTES;
+      } catch {
+        return false;
+      }
+    },
+    {
+      message: 'Note content must not exceed 100 KB serialized size.',
+    },
+  );
+
 export const createNoteSchema = z.object({
   title: z
     .string()
     .trim()
     .min(1, 'Title is required.')
     .max(200, 'Title must not exceed 200 characters.'),
-  content: z.record(z.unknown()),
-  contentText: z.string().max(50000, 'Content text must not exceed 50,000 characters.').optional(),
+  content: noteContentSchema,
 });
 
 export const updateNoteSchema = z
@@ -18,19 +51,15 @@ export const updateNoteSchema = z
       .min(1, 'Title cannot be empty.')
       .max(200, 'Title must not exceed 200 characters.')
       .optional(),
-    content: z.record(z.unknown()).optional(),
-    contentText: z
-      .string()
-      .max(50000, 'Content text must not exceed 50,000 characters.')
-      .optional(),
+    content: noteContentSchema.optional(),
   })
-  .refine(
-    (data) =>
-      data.title !== undefined || data.content !== undefined || data.contentText !== undefined,
-    {
-      message: 'At least one field must be provided to update.',
-    },
-  );
+  .refine((data) => data.title !== undefined || data.content !== undefined, {
+    message: 'At least one field (title or content) must be provided to update.',
+  });
+
+export const noteIdParamSchema = z.object({
+  noteId: z.string().uuid('Invalid note identifier format.'),
+});
 
 export const listNotesQuerySchema = z.object({
   q: z.string().trim().max(100).optional(),
