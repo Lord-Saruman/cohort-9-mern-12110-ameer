@@ -160,21 +160,27 @@ describe('useNoteDetail', () => {
   it('validates title and content size when saving', async () => {
     const { result } = renderHook(() => useNoteDetail({ noteId: 'new' }));
 
-    await expect(result.current.saveNote({ title: '   ', content: sampleDoc })).rejects.toThrow(
-      'Title is required.',
-    );
+    await act(async () => {
+      await expect(result.current.saveNote({ title: '   ', content: sampleDoc })).rejects.toThrow(
+        'Title is required.',
+      );
+    });
 
-    await expect(
-      result.current.saveNote({ title: 'a'.repeat(201), content: sampleDoc }),
-    ).rejects.toThrow('Title must not exceed 200 characters.');
+    await act(async () => {
+      await expect(
+        result.current.saveNote({ title: 'a'.repeat(201), content: sampleDoc }),
+      ).rejects.toThrow('Title must not exceed 200 characters.');
+    });
 
     const hugeDoc: TipTapDoc = {
       type: 'doc',
       content: [{ type: 'paragraph', text: 'x'.repeat(105 * 1024) }],
     };
-    await expect(
-      result.current.saveNote({ title: 'Valid Title', content: hugeDoc }),
-    ).rejects.toThrow('Note content must not exceed 100 KB.');
+    await act(async () => {
+      await expect(
+        result.current.saveNote({ title: 'Valid Title', content: hugeDoc }),
+      ).rejects.toThrow('Note content must not exceed 100 KB.');
+    });
   });
 
   it('saves new note and deletes existing note', async () => {

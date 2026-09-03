@@ -371,4 +371,54 @@ describe('Notes Dashboard Feature', () => {
       expect(screen.getByTestId('note-editor-page')).toBeInTheDocument();
     });
   });
+
+  it('hides pagination controls when notes fit on a single page and omits empty state on API error', async () => {
+    global.fetch = createMockFetch({
+      'GET /api/v1/auth/me': {
+        status: 200,
+        body: { data: { user: mockUser } },
+      },
+      'GET /api/v1/notes': {
+        status: 200,
+        body: {
+          data: mockNotesList,
+          meta: { page: 1, pageSize: 20, total: 2 },
+        },
+      },
+    });
+
+    window.history.pushState({}, '', '/dashboard');
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Architecture Review')).toBeInTheDocument();
+    });
+
+    expect(screen.queryByTestId('notes-pagination')).not.toBeInTheDocument();
+
+    global.fetch = createMockFetch({
+      'GET /api/v1/auth/me': {
+        status: 200,
+        body: { data: { user: mockUser } },
+      },
+      'GET /api/v1/notes': {
+        status: 500,
+        body: {
+          error: {
+            code: 'INTERNAL_SERVER_ERROR',
+            message: 'Server error loading notes.',
+          },
+        },
+      },
+    });
+
+    window.history.pushState({}, '', '/dashboard');
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('notes-error')).toBeInTheDocument();
+    });
+
+    expect(screen.queryByTestId('notes-empty-state')).not.toBeInTheDocument();
+  });
 });

@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import { App } from '../src/app/App';
@@ -413,5 +413,130 @@ describe('Rich Text Note Editor Feature', () => {
     const backdrop = screen.getByTestId('modal-backdrop');
     await user.click(backdrop);
     expect(screen.queryByTestId('delete-confirm-modal')).not.toBeInTheDocument();
+  });
+
+  it('surfaces validation error alert when save fails with validation error', async () => {
+    const user = userEvent.setup();
+
+    global.fetch = createMockFetch({
+      'GET /api/v1/auth/me': {
+        status: 200,
+        body: { data: { user: mockUser } },
+      },
+      'GET /api/v1/notes/note-uuid-1': {
+        status: 200,
+        body: {
+          data: mockExistingNote,
+        },
+      },
+      'PATCH /api/v1/notes/note-uuid-1': {
+        status: 400,
+        body: {
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: 'Note content must not exceed 100 KB serialized size.',
+          },
+        },
+      },
+    });
+
+    window.history.pushState({}, '', '/notes/note-uuid-1');
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('Project Roadmap')).toBeInTheDocument();
+    });
+
+    const titleInput = screen.getByTestId('note-title-input');
+    await user.clear(titleInput);
+    await user.type(titleInput, 'Roadmap Updated');
+
+    await waitFor(() => {
+      expect(screen.getByTestId('save-note-button')).not.toBeDisabled();
+    });
+
+    fireEvent.click(screen.getByTestId('save-note-button'));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText('Note content must not exceed 100 KB serialized size.'),
+      ).toBeInTheDocument();
+    });
+  });
+
+  it('restores focus to the delete button when delete modal is cancelled', async () => {
+    const user = userEvent.setup();
+
+    global.fetch = createMockFetch({
+      'GET /api/v1/auth/me': {
+        status: 200,
+        body: { data: { user: mockUser } },
+      },
+      'GET /api/v1/notes/note-uuid-1': {
+        status: 200,
+        body: {
+          data: mockExistingNote,
+        },
+      },
+    });
+
+    window.history.pushState({}, '', '/notes/note-uuid-1');
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('delete-note-button')).toBeInTheDocument();
+    });
+
+    const deleteBtn = screen.getByTestId('delete-note-button');
+    deleteBtn.focus();
+    await user.click(deleteBtn);
+
+    expect(screen.getByTestId('delete-confirm-modal')).toBeInTheDocument();
+
+    await user.click(screen.getByTestId('cancel-delete-button'));
+
+    expect(screen.queryByTestId('delete-confirm-modal')).not.toBeInTheDocument();
+    expect(deleteBtn).toHaveFocus();
+  });
+
+  it('clears previous success alert when title is modified after saving', async () => {
+    const user = userEvent.setup();
+
+    global.fetch = createMockFetch({
+      'GET /api/v1/auth/me': {
+        status: 200,
+        body: { data: { user: mockUser } },
+      },
+      'GET /api/v1/notes/note-uuid-1': {
+        status: 200,
+        body: {
+          data: mockExistingNote,
+        },
+      },
+      'PATCH /api/v1/notes/note-uuid-1': {
+        status: 200,
+        body: {
+          data: mockExistingNote,
+        },
+      },
+    });
+
+    window.history.pushState({}, '', '/notes/note-uuid-1');
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('Project Roadmap')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByTestId('save-note-button'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Note saved successfully!')).toBeInTheDocument();
+    });
+
+    const titleInput = screen.getByTestId('note-title-input');
+    await user.type(titleInput, ' - Draft');
+
+    expect(screen.queryByText('Note saved successfully!')).not.toBeInTheDocument();
   });
 });

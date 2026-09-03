@@ -41,14 +41,16 @@ export const NoteEditorPage: FC = () => {
   const handleTitleChange = (newTitle: string) => {
     setTitle(newTitle);
     if (error) setError(null);
+    if (successMessage) setSuccessMessage(null);
   };
 
   const handleContentChange = (newContent: TipTapDoc) => {
     setContent(newContent);
-    if (error) setError(null);
   };
 
   const handleSave = async () => {
+    setSuccessMessage(null);
+
     const trimmedTitle = title.trim();
     if (!trimmedTitle) {
       setError('Title is required.');
@@ -59,14 +61,16 @@ export const NoteEditorPage: FC = () => {
       return;
     }
 
-    setSuccessMessage(null);
     try {
       const saved = await saveNote({ title: trimmedTitle, content });
       setSuccessMessage(isNew ? 'Note created successfully!' : 'Note saved successfully!');
       if (isNew) {
         navigate(`/notes/${saved.id}`, { replace: true });
       }
-    } catch {}
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to save note.';
+      setError(msg);
+    }
   };
 
   const handleDelete = async () => {

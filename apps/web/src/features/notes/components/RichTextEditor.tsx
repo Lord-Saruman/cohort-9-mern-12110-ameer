@@ -1,7 +1,7 @@
 import Link from '@tiptap/extension-link';
 import { EditorContent, useEditor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
-import { useEffect, type FC } from 'react';
+import { useEffect, useRef, useState, type FC } from 'react';
 
 import type { TipTapDoc } from '../api/notes.types';
 import { EditorToolbar } from './EditorToolbar';
@@ -13,6 +13,11 @@ export interface RichTextEditorProps {
 }
 
 export const RichTextEditor: FC<RichTextEditorProps> = ({ content, onChange, editable = true }) => {
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+
+  const [, setSelectionTick] = useState(0);
+
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
@@ -33,9 +38,22 @@ export const RichTextEditor: FC<RichTextEditorProps> = ({ content, onChange, edi
     editable,
     onUpdate: ({ editor: currentEditor }) => {
       const json = currentEditor.getJSON() as TipTapDoc;
-      onChange(json);
+      onChangeRef.current(json);
     },
   });
+
+  useEffect(() => {
+    if (!editor) return;
+
+    const handleTransaction = () => {
+      setSelectionTick((prev) => (prev + 1) % 10000);
+    };
+
+    editor.on('transaction', handleTransaction);
+    return () => {
+      editor.off('transaction', handleTransaction);
+    };
+  }, [editor]);
 
   useEffect(() => {
     if (editor && content) {

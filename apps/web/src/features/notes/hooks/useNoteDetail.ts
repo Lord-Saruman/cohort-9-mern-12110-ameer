@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { ApiClientError } from '../../../shared/api/client';
 import { notesApi } from '../api/notes.api';
@@ -52,6 +52,9 @@ export const useNoteDetail = (options: UseNoteDetailOptions = {}): UseNoteDetail
     return null;
   });
 
+  const noteRef = useRef(note);
+  noteRef.current = note;
+
   const [isLoading, setIsLoading] = useState<boolean>(!isNew);
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [isDeleting, setIsDeleting] = useState<boolean>(false);
@@ -70,6 +73,12 @@ export const useNoteDetail = (options: UseNoteDetailOptions = {}): UseNoteDetail
       setIsLoading(false);
       setIsNotFound(false);
       setError(null);
+      return;
+    }
+
+    if (noteRef.current && noteRef.current.id === noteId) {
+      setIsLoading(false);
+      setIsNotFound(false);
       return;
     }
 
@@ -110,24 +119,24 @@ export const useNoteDetail = (options: UseNoteDetailOptions = {}): UseNoteDetail
 
   const saveNote = useCallback(
     async (input: { title: string; content: TipTapDoc }): Promise<NoteDto> => {
-      const trimmedTitle = input.title.trim();
-      if (!trimmedTitle) {
-        throw new Error('Title is required.');
-      }
-      if (trimmedTitle.length > 200) {
-        throw new Error('Title must not exceed 200 characters.');
-      }
-
-      const serialized = JSON.stringify(input.content);
-      const contentBytes = getByteLength(serialized);
-      if (contentBytes > MAX_SERIALIZED_CONTENT_BYTES) {
-        throw new Error('Note content must not exceed 100 KB.');
-      }
-
       setIsSaving(true);
       setError(null);
 
       try {
+        const trimmedTitle = input.title.trim();
+        if (!trimmedTitle) {
+          throw new Error('Title is required.');
+        }
+        if (trimmedTitle.length > 200) {
+          throw new Error('Title must not exceed 200 characters.');
+        }
+
+        const serialized = JSON.stringify(input.content);
+        const contentBytes = getByteLength(serialized);
+        if (contentBytes > MAX_SERIALIZED_CONTENT_BYTES) {
+          throw new Error('Note content must not exceed 100 KB.');
+        }
+
         let saved: NoteDto;
         if (isNew) {
           const payload: CreateNoteInput = {

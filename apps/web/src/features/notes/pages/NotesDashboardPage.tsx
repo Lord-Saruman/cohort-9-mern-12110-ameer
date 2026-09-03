@@ -56,7 +56,7 @@ export const NotesDashboardPage: FC = () => {
         <div className="dashboard-loading" data-testid="notes-loading">
           <Spinner size={36} />
         </div>
-      ) : notes.length === 0 ? (
+      ) : error && notes.length === 0 ? null : notes.length === 0 ? (
         <div className="empty-state" data-testid="notes-empty-state">
           <div className="empty-state-icon" aria-hidden="true">
             {searchQuery ? '🔍' : '📝'}

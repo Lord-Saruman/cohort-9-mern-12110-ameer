@@ -38,14 +38,23 @@ export const useNotesList = (options: UseNotesListOptions = {}): UseNotesListRes
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const prevSearchRef = useRef(searchQuery);
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
   useEffect(() => {
     const timer = setTimeout(() => {
-      setDebouncedSearch((prev) => {
-        if (prev !== searchQuery) {
-          setPage(1);
-        }
-        return searchQuery;
-      });
+      if (prevSearchRef.current !== searchQuery) {
+        prevSearchRef.current = searchQuery;
+        setPage(1);
+      }
+      setDebouncedSearch(searchQuery);
     }, debounceMs);
 
     return () => clearTimeout(timer);
@@ -65,12 +74,12 @@ export const useNotesList = (options: UseNotesListOptions = {}): UseNotesListRes
         pageSize,
       });
 
-      if (currentRequestId === requestIdRef.current) {
+      if (currentRequestId === requestIdRef.current && isMountedRef.current) {
         setNotes(result.notes);
         setMeta(result.meta);
       }
     } catch (err: unknown) {
-      if (currentRequestId === requestIdRef.current) {
+      if (currentRequestId === requestIdRef.current && isMountedRef.current) {
         const message =
           err instanceof Error
             ? err.message
@@ -78,7 +87,7 @@ export const useNotesList = (options: UseNotesListOptions = {}): UseNotesListRes
         setError(message);
       }
     } finally {
-      if (currentRequestId === requestIdRef.current) {
+      if (currentRequestId === requestIdRef.current && isMountedRef.current) {
         setIsLoading(false);
       }
     }

@@ -26,12 +26,7 @@ export const formatDate = (isoString: string): string => {
 
 export const NoteCard: FC<NoteCardProps> = ({ note }) => {
   return (
-    <Link
-      to={`/notes/${note.id}`}
-      className="note-card"
-      data-testid={`note-card-${note.id}`}
-      aria-label={`Note: ${note.title}`}
-    >
+    <Link to={`/notes/${note.id}`} className="note-card" data-testid={`note-card-${note.id}`}>
       <article className="note-card-content">
         <h2 className="note-card-title">{note.title}</h2>
         <p className="note-card-preview">{note.preview || 'No content preview available.'}</p>

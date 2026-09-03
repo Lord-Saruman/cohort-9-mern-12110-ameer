@@ -19,10 +19,12 @@ export const DeleteConfirmModal: FC<DeleteConfirmModalProps> = ({
 }) => {
   const cancelButtonRef = useRef<HTMLButtonElement>(null);
   const modalRef = useRef<HTMLDivElement>(null);
+  const previousActiveElementRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     if (!isOpen) return;
 
+    previousActiveElementRef.current = document.activeElement as HTMLElement | null;
     cancelButtonRef.current?.focus();
 
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -53,7 +55,10 @@ export const DeleteConfirmModal: FC<DeleteConfirmModalProps> = ({
     };
 
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      previousActiveElementRef.current?.focus?.();
+    };
   }, [isOpen, isDeleting, onCancel]);
 
   if (!isOpen) return null;

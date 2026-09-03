@@ -17,7 +17,7 @@ export const NotesPagination: FC<NotesPaginationProps> = ({
 }) => {
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
-  if (totalPages <= 1 && total === 0) {
+  if (totalPages <= 1) {
     return null;
   }
 
