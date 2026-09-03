@@ -951,3 +951,77 @@ a:hover {
     transform: translateY(0) scale(1);
   }
 }
+
+@media (max-width: 640px) {
+  .main-content {
+    padding: 1.25rem 0.75rem;
+  }
+
+  .dashboard-container {
+    padding: 1.25rem 0.75rem;
+  }
+
+  .dashboard-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 1rem;
+  }
+
+  .dashboard-header .btn {
+    width: 100%;
+  }
+
+  .notes-grid {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+
+  .auth-container {
+    margin: 1rem auto;
+    padding: 1.75rem 1.25rem;
+  }
+
+  .editor-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.75rem;
+  }
+
+  .editor-header-nav {
+    justify-content: space-between;
+  }
+
+  .editor-header-actions {
+    justify-content: flex-end;
+  }
+
+  .editor-title-input {
+    font-size: 1.4rem;
+  }
+
+  .toolbar-group {
+    flex-wrap: wrap;
+  }
+
+  .modal-dialog {
+    margin: 1rem;
+    padding: 1.25rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .dashboard-title {
+    font-size: 1.5rem;
+  }
+
+  .editor-title-input {
+    font-size: 1.25rem;
+  }
+
+  .editor-char-counter {
+    position: static;
+    display: block;
+    text-align: right;
+    margin-top: 0.25rem;
+  }
+}
