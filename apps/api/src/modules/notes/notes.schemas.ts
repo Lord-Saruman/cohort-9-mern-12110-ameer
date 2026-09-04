@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-const MAX_SERIALIZED_CONTENT_BYTES = 100 * 1024; // 100 KB
+const MAX_SERIALIZED_CONTENT_BYTES = 100 * 1024;
 
 const tipTapNodeSchema: z.ZodType<unknown> = z.lazy(() =>
   z
