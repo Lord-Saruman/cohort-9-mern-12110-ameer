@@ -24,27 +24,40 @@ export const createAuthToken = (
   payload: AuthSessionPayload,
   secret: string,
   expiresIn: string,
-): string => jwt.sign(payload, secret, { expiresIn: expiresIn as SignOptions['expiresIn'] });
+): string =>
+  jwt.sign({ ...payload, sub: payload.userId }, secret, {
+    expiresIn: expiresIn as SignOptions['expiresIn'],
+  });
 
 export const verifyAuthToken = (token: string, secret: string): AuthSessionPayload => {
   try {
     const decoded = jwt.verify(token, secret);
-    if (
-      typeof decoded !== 'object' ||
-      decoded === null ||
-      !('userId' in decoded) ||
-      !('email' in decoded)
-    ) {
+    if (typeof decoded !== 'object' || decoded === null) {
       throw new AppError({
         statusCode: 401,
         code: 'UNAUTHENTICATED',
         message: 'Invalid authentication token payload.',
       });
     }
-    return {
-      userId: String((decoded as { userId: unknown }).userId),
-      email: String((decoded as { email: unknown }).email),
-    };
+
+    const payloadObj = decoded as Record<string, unknown>;
+    const userId =
+      typeof payloadObj.userId === 'string'
+        ? payloadObj.userId
+        : typeof payloadObj.sub === 'string'
+          ? payloadObj.sub
+          : undefined;
+    const email = typeof payloadObj.email === 'string' ? payloadObj.email : undefined;
+
+    if (!userId || !email) {
+      throw new AppError({
+        statusCode: 401,
+        code: 'UNAUTHENTICATED',
+        message: 'Invalid authentication token payload.',
+      });
+    }
+
+    return { userId, email };
   } catch (error: unknown) {
     if (error instanceof AppError) throw error;
     throw new AppError({

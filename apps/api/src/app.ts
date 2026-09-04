@@ -31,6 +31,7 @@ export const createApp = ({
 }: AppOptions): Express => {
   const app = express();
 
+  app.set('trust proxy', 1);
   app.disable('x-powered-by');
   app.use(requestContext);
   app.use(helmet());

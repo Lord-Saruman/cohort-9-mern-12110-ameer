@@ -6,7 +6,7 @@ import {
   type RequestHandler,
 } from 'express';
 
-import type { AppLocals } from '../../middleware/request-context';
+import { AppError } from '../../common/app-error';
 import { createRequireAuth } from '../../middleware/auth.middleware';
 import { createAuthController, type AuthControllerOptions } from './auth.controller';
 
@@ -22,9 +22,24 @@ interface RateLimitEntry {
 
 export const createRateLimiter = (options: { max: number; windowMs: number }): RequestHandler => {
   const hits = new Map<string, RateLimitEntry>();
+  let lastCleanup = Date.now();
 
-  return (request: Request, response: Response, next: NextFunction): void => {
+  const cleanup = (now: number): void => {
+    for (const [key, entry] of hits.entries()) {
+      if (now > entry.resetAt) {
+        hits.delete(key);
+      }
+    }
+  };
+
+  return (request: Request, _response: Response, next: NextFunction): void => {
     const now = Date.now();
+
+    if (now - lastCleanup > options.windowMs || hits.size > 1000) {
+      cleanup(now);
+      lastCleanup = now;
+    }
+
     const clientKey = request.ip || request.socket.remoteAddress || 'unknown';
     const entry = hits.get(clientKey);
 
@@ -35,14 +50,13 @@ export const createRateLimiter = (options: { max: number; windowMs: number }): R
     }
 
     if (entry.count >= options.max) {
-      const locals = response.locals as AppLocals | undefined;
-      response.status(429).json({
-        error: {
+      next(
+        new AppError({
+          statusCode: 429,
           code: 'RATE_LIMIT_EXCEEDED',
           message: 'Too many requests. Please try again later.',
-          requestId: locals?.requestId,
-        },
-      });
+        }),
+      );
       return;
     }
 

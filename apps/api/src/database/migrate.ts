@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { RowDataPacket } from 'mysql2';
@@ -11,7 +12,13 @@ type MigrationRow = RowDataPacket & { name: string };
 const run = async (): Promise<void> => {
   const database = createDatabasePool(environment);
   try {
-    const migrationsDirectory = join(process.cwd(), 'database', 'migrations');
+    const defaultDir = join(process.cwd(), 'database', 'migrations');
+    const candidateDirs = [
+      defaultDir,
+      join(process.cwd(), 'apps', 'api', 'database', 'migrations'),
+      join(__dirname, '..', '..', 'database', 'migrations'),
+    ];
+    const migrationsDirectory = candidateDirs.find((dir) => existsSync(dir)) ?? defaultDir;
     const files = (await readdir(migrationsDirectory))
       .filter((file) => file.endsWith('.sql'))
       .sort();

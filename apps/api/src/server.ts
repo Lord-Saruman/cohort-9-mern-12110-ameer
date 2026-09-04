@@ -18,6 +18,17 @@ const server = app.listen(environment.PORT, () => {
 
 const shutdown = (signal: string): void => {
   logger.info({ signal }, 'shutting down api server');
+
+  const forcedTimer = setTimeout(() => {
+    logger.error('forced shutdown after timeout');
+    process.exit(1);
+  }, 10000);
+  forcedTimer.unref();
+
+  if ('closeIdleConnections' in server && typeof server.closeIdleConnections === 'function') {
+    server.closeIdleConnections();
+  }
+
   server.close(async () => {
     try {
       await database.end();

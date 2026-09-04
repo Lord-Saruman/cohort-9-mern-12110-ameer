@@ -4,11 +4,6 @@ export interface LocationStateFrom {
   hash?: string;
 }
 
-/**
- * Validates and sanitizes a redirection target path.
- * Protects against open redirect attacks (e.g. protocol-relative URLs or backslash bypasses)
- * while preserving valid relative paths, query parameters, and hashes.
- */
 export const getSafeRedirectPath = (from?: unknown, defaultPath = '/dashboard'): string => {
   if (!from || typeof from !== 'object') {
     return defaultPath;
@@ -23,8 +18,6 @@ export const getSafeRedirectPath = (from?: unknown, defaultPath = '/dashboard'):
   const search = typeof candidate.search === 'string' ? candidate.search : '';
   const hash = typeof candidate.hash === 'string' ? candidate.hash : '';
 
-  // Must be an internal relative path starting with a single '/'
-  // Rejects protocol-relative '//', external schemes, and Windows backslashes '\'
   if (
     pathname.startsWith('/') &&
     !pathname.startsWith('//') &&

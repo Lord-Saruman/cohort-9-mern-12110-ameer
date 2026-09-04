@@ -53,7 +53,6 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     try {
       await authApi.logout();
     } catch {
-      // Best-effort logout on server; local session is cleared regardless
     } finally {
       setUser(null);
     }

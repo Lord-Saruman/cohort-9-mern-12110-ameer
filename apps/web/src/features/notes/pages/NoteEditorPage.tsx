@@ -78,7 +78,11 @@ export const NoteEditorPage: FC = () => {
       await deleteNote();
       setIsDeleteModalOpen(false);
       navigate('/dashboard', { replace: true });
-    } catch {}
+    } catch (err: unknown) {
+      setIsDeleteModalOpen(false);
+      const msg = err instanceof Error ? err.message : 'Failed to delete note.';
+      setError(msg);
+    }
   };
 
   if (isLoading) {

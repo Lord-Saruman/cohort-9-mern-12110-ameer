@@ -539,4 +539,45 @@ describe('Rich Text Note Editor Feature', () => {
 
     expect(screen.queryByText('Note saved successfully!')).not.toBeInTheDocument();
   });
+
+  it('recovers gracefully and displays error alert when note deletion fails', async () => {
+    const user = userEvent.setup();
+
+    global.fetch = createMockFetch({
+      'GET /api/v1/auth/me': {
+        status: 200,
+        body: { data: { user: mockUser } },
+      },
+      'GET /api/v1/notes/note-uuid-1': {
+        status: 200,
+        body: {
+          data: mockExistingNote,
+        },
+      },
+      'DELETE /api/v1/notes/note-uuid-1': {
+        status: 500,
+        body: {
+          error: { code: 'INTERNAL_ERROR', message: 'Failed to delete note from database.' },
+        },
+      },
+    });
+
+    window.history.pushState({}, '', '/notes/note-uuid-1');
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('delete-note-button')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByTestId('delete-note-button'));
+    expect(screen.getByTestId('delete-confirm-modal')).toBeInTheDocument();
+
+    await user.click(screen.getByTestId('confirm-delete-button'));
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('delete-confirm-modal')).not.toBeInTheDocument();
+    });
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Failed to delete note from database.');
+  });
 });
