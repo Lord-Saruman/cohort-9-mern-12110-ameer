@@ -3,8 +3,14 @@ import { environment } from './config/env';
 import { createDatabasePool } from './infrastructure/database';
 import { logger } from './infrastructure/logger';
 
-const app = createApp({ clientOrigin: environment.CLIENT_ORIGIN });
 const database = createDatabasePool(environment);
+const app = createApp({
+  clientOrigin: environment.CLIENT_ORIGIN,
+  databasePool: database,
+  jwtSecret: environment.JWT_SECRET,
+  jwtExpiresIn: environment.JWT_EXPIRES_IN,
+  isProduction: environment.NODE_ENV === 'production',
+});
 
 const server = app.listen(environment.PORT, () => {
   logger.info({ port: environment.PORT }, 'api server listening');

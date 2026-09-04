@@ -54,4 +54,43 @@ describe('GET /api/v1/health', () => {
       expect.fail(error instanceof Error ? error.message : String(error));
     }
   });
+
+  it('handles unsupported content encoding with 415 error', async () => {
+    const app = createApp({ clientOrigin: 'http://localhost:5173' });
+
+    try {
+      const response = await request(app)
+        .post('/api/v1/health')
+        .set('Content-Type', 'application/json')
+        .set('Content-Encoding', 'deflate-unsupported')
+        .send('{"test": true}')
+        .expect(415);
+
+      expect(response.body.error.code).to.equal('UNSUPPORTED_MEDIA_TYPE');
+      expect(response.body.error.message).to.equal(
+        'The request encoding or character set is not supported.',
+      );
+    } catch (error: unknown) {
+      expect.fail(error instanceof Error ? error.message : String(error));
+    }
+  });
+
+  it('handles unsupported charset with 415 error', async () => {
+    const app = createApp({ clientOrigin: 'http://localhost:5173' });
+
+    try {
+      const response = await request(app)
+        .post('/api/v1/health')
+        .set('Content-Type', 'application/json; charset=invalid-charset')
+        .send('{"test": true}')
+        .expect(415);
+
+      expect(response.body.error.code).to.equal('UNSUPPORTED_MEDIA_TYPE');
+      expect(response.body.error.message).to.equal(
+        'The request encoding or character set is not supported.',
+      );
+    } catch (error: unknown) {
+      expect.fail(error instanceof Error ? error.message : String(error));
+    }
+  });
 });
