@@ -358,10 +358,7 @@ describe('Auth routes', () => {
 
       const cookie = regRes.headers['set-cookie']![0];
 
-      const meRes = await request(app)
-        .get('/api/v1/auth/me')
-        .set('Cookie', cookie)
-        .expect(200);
+      const meRes = await request(app).get('/api/v1/auth/me').set('Cookie', cookie).expect(200);
 
       expect(meRes.body.data.user.email).to.equal('jane@example.com');
       expect(meRes.body.data.user.name).to.equal('Jane Doe');
@@ -391,20 +388,12 @@ describe('Auth routes', () => {
       });
 
       const badToken = jwt.sign({ userId: 'fake', email: 'test@example.com' }, 'wrong-secret');
-      await request(app)
-        .get('/api/v1/auth/me')
-        .set('Cookie', `token=${badToken}`)
-        .expect(401);
+      await request(app).get('/api/v1/auth/me').set('Cookie', `token=${badToken}`).expect(401);
 
-      const expiredToken = jwt.sign(
-        { userId: 'fake', email: 'test@example.com' },
-        jwtSecret,
-        { expiresIn: '0s' },
-      );
-      await request(app)
-        .get('/api/v1/auth/me')
-        .set('Cookie', `token=${expiredToken}`)
-        .expect(401);
+      const expiredToken = jwt.sign({ userId: 'fake', email: 'test@example.com' }, jwtSecret, {
+        expiresIn: '0s',
+      });
+      await request(app).get('/api/v1/auth/me').set('Cookie', `token=${expiredToken}`).expect(401);
     });
   });
 

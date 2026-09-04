@@ -7,6 +7,7 @@ import type { Pool } from 'mysql2/promise';
 import { errorHandler, notFoundHandler } from './middleware/error-handler';
 import { requestContext } from './middleware/request-context';
 import { createAuthRouter } from './modules/auth/auth.routes';
+import { createNotesRouter } from './modules/notes/notes.routes';
 import { createHealthRouter } from './routes/health.routes';
 
 export interface AppOptions {
@@ -48,6 +49,13 @@ export const createApp = ({
         isProduction,
         rateLimitMax,
         rateLimitWindowMs,
+      }),
+    );
+    app.use(
+      '/api/v1/notes',
+      createNotesRouter({
+        pool: databasePool,
+        jwtSecret,
       }),
     );
   }
