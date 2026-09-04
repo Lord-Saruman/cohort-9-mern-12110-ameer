@@ -58,15 +58,15 @@ Default configuration:
 PORT=3000
 NODE_ENV=development
 CLIENT_ORIGIN=http://localhost:5173
-DB_HOST=127.0.0.1
-DB_PORT=3306
-DB_USER=notes_user
-DB_PASSWORD=notes_password
-DB_NAME=notes_db
-JWT_SECRET=super-secret-jwt-development-key-replace-in-production-min-32-chars
-JWT_EXPIRES_IN=7d
-RATE_LIMIT_MAX=100
-RATE_LIMIT_WINDOW_MS=60000
+DATABASE_HOST=127.0.0.1
+DATABASE_PORT=3306
+DATABASE_NAME=notes_app
+DATABASE_USER=notes_user
+DATABASE_PASSWORD=change_me_local
+DATABASE_SSL=false
+DATABASE_SSL_REJECT_UNAUTHORIZED=true
+JWT_SECRET=replace_with_a_unique_32_character_minimum_secret
+JWT_EXPIRES_IN=8h
 ```
 
 ### 2. Web Configuration (`apps/web/.env`)
@@ -143,7 +143,12 @@ curl http://localhost:3000/api/v1/health
 Expected response:
 
 ```json
-{ "status": "ok", "timestamp": "2026-09-03T12:00:00.000Z" }
+{
+  "data": {
+    "status": "ok",
+    "timestamp": "2026-09-03T12:00:00.000Z"
+  }
+}
 ```
 
 ### Start Frontend Web Application
@@ -224,6 +229,8 @@ Follow these steps to demonstrate the full application lifecycle:
 5. Open browser DevTools $\to$ **Application** $\to$ **Cookies** $\to$ `http://localhost:5173`.
 6. Confirm the `token` cookie is present, marked `HttpOnly`, and has `SameSite=Lax`.
 
+![User Registration Screen](assets/screenshots/01-registration-login.png)
+
 ### Step 2: Creating and Formatting Rich-Text Notes
 
 1. Click **+ New Note** or navigate to `/notes/new`.
@@ -239,6 +246,10 @@ Follow these steps to demonstrate the full application lifecycle:
 8. Notice the polite live confirmation alert: `"Note created successfully!"`.
 9. The URL automatically updates to `/notes/<note-id>`.
 
+![Rich-Text Note Editor](assets/screenshots/03-rich-text-editor.png)
+
+![Notes Dashboard & Search](assets/screenshots/02-notes-dashboard.png)
+
 ### Step 3: Verifying Multi-Tenant Ownership Isolation
 
 1. In the navigation bar, click **Alice Walker** $\to$ **Sign Out**.
@@ -251,7 +262,10 @@ Follow these steps to demonstrate the full application lifecycle:
 5. Attempt to search for `Sprint Plan` in Bob's search bar:
    - Search returns zero results (`No notes match your search.`).
 6. Attempt to directly access Alice's note URL (`/notes/<alice-note-id>`):
-   - Notice the application surfaces a `404 Not Found` error and redirects safely.
+   - Notice the application surfaces the accessible **Note Not Found** view (`The note you requested does not exist or you do not have permission to view it.`) with a **Return to Dashboard** button, strictly isolating cross-user notes without leaking existence.
+
+![Cross-User Note Isolation 404](assets/screenshots/04-ownership-isolation-404.png)
+
 7. Sign out as Bob and sign back in as Alice (`alice@example.com`):
    - Alice's `Project Sprint Plan` note remains intact and accessible.
 
@@ -285,18 +299,21 @@ Follow these steps to demonstrate the full application lifecycle:
 ### Step 5: Structured Log Redaction Verification
 
 1. Inspect the terminal running `npm run dev:api`.
-2. Locate the log entries for authentication and note creation.
-3. Verify that passwords, tokens, cookies, and note contents appear as `[REDACTED]`:
+2. Locate the HTTP request completion log entries.
+3. Verify that requests record only structured HTTP transport metadata (`requestId`, `method`, `path`, `statusCode`, `durationMs`):
    ```json
    {
      "level": 30,
      "time": 1788449160435,
-     "password": "[REDACTED]",
-     "content": "[REDACTED]",
-     "token": "[REDACTED]",
+     "requestId": "41b72362-7293-4ca9-989a-9d51943d0135",
+     "method": "POST",
+     "path": "/api/v1/notes",
+     "statusCode": 201,
+     "durationMs": 3,
      "msg": "http request completed"
    }
    ```
+4. Sensitive fields (`password`, `token`, `content`, cookies, and authorization headers) are strictly redacted via Pino wildcard censor masks (`[REDACTED]`) and are never leaked to logs or clients, as verified by `apps/api/test/hardening.test.ts`.
 
 ### Step 6: Safe Note Deletion
 
@@ -305,3 +322,5 @@ Follow these steps to demonstrate the full application lifecycle:
 3. Confirm that the accessible confirmation modal appears with keyboard focus trapped.
 4. Click **Yes, Delete Note**.
 5. Observe redirection back to `/dashboard` with updated zero-count state.
+
+![Delete Confirmation Modal](assets/screenshots/05-delete-modal.png)

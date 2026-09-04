@@ -13,7 +13,7 @@
     "build": "npm run build --workspaces",
     "lint": "npm run lint --workspaces",
     "test": "npm run test --workspaces",
-    "test:coverage": "npm run test:coverage --workspaces",
+    "test:coverage": "npm run test:coverage --workspaces && node -e \"const fs=require('fs');['apps/api','apps/web'].forEach(pkg=>{const f=pkg+'/coverage/lcov.info';if(fs.existsSync(f)){fs.writeFileSync(f,fs.readFileSync(f,'utf8').replace(/\\\\/g,'/').replace(/SF:src\\//g,'SF:'+pkg+'/src/'));}});\"",
     "db:migrate": "npm run db:migrate --workspace=@notes/api",
     "format:check": "prettier --check .",
     "format": "prettier --write ."
