@@ -5,13 +5,15 @@ export interface UserDto {
   createdAt: string;
 }
 
+export interface PaginationMeta {
+  page: number;
+  pageSize: number;
+  total: number;
+}
+
 export interface ApiSuccessResponse<T> {
   data: T;
-  meta?: {
-    page: number;
-    pageSize: number;
-    total: number;
-  };
+  meta?: PaginationMeta;
 }
 
 export interface ApiFieldError {

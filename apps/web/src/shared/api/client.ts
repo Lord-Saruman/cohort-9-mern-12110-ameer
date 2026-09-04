@@ -1,4 +1,4 @@
-import type { ApiErrorEnvelope, ApiFieldError } from './types';
+import type { ApiErrorEnvelope, ApiFieldError, ApiSuccessResponse } from './types';
 
 export class ApiClientError extends Error {
   readonly statusCode: number;
@@ -24,6 +24,10 @@ export class ApiClientError extends Error {
   getFieldError(field: string): string | undefined {
     return this.details?.find((item) => item.field === field)?.message;
   }
+
+  get status(): number {
+    return this.statusCode;
+  }
 }
 
 export interface RequestOptions extends Omit<RequestInit, 'body'> {
@@ -47,7 +51,7 @@ const getApiBaseUrl = (): string => {
 };
 
 export const apiClient = {
-  async request<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
+  async requestRaw<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
     const baseUrl = getApiBaseUrl();
     const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
     const url = `${baseUrl}${cleanEndpoint}`;
@@ -66,7 +70,7 @@ export const apiClient = {
         ...options,
         headers,
         body,
-        credentials: 'include',
+        credentials: options.credentials ?? 'include',
       });
     } catch (err: unknown) {
       throw new ApiClientError(
@@ -100,6 +104,12 @@ export const apiClient = {
       throw new ApiClientError(response.status, code, message, details, requestId);
     }
 
+    return data as T;
+  },
+
+  async request<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
+    const data = await this.requestRaw<unknown>(endpoint, options);
+
     if (typeof data === 'object' && data !== null && 'data' in data) {
       return (data as { data: T }).data;
     }
@@ -109,6 +119,10 @@ export const apiClient = {
 
   get<T>(endpoint: string, options?: RequestOptions): Promise<T> {
     return this.request<T>(endpoint, { ...options, method: 'GET' });
+  },
+
+  getWithMeta<T>(endpoint: string, options?: RequestOptions): Promise<ApiSuccessResponse<T>> {
+    return this.requestRaw<ApiSuccessResponse<T>>(endpoint, { ...options, method: 'GET' });
   },
 
   post<T>(endpoint: string, body?: unknown, options?: RequestOptions): Promise<T> {
