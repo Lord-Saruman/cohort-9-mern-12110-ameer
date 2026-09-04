@@ -28,6 +28,15 @@ export const RegisterForm = () => {
     };
   }, [password]);
 
+  const validCount = useMemo(() => {
+    return [
+      passwordCriteria.minLength && passwordCriteria.maxLength,
+      passwordCriteria.hasUpper,
+      passwordCriteria.hasLower,
+      passwordCriteria.hasDigit,
+    ].filter(Boolean).length;
+  }, [passwordCriteria]);
+
   const validate = (): boolean => {
     const errors: Record<string, string> = {};
     const trimmedName = name.trim();
@@ -175,7 +184,54 @@ export const RegisterForm = () => {
       />
 
       <div className="password-checklist" aria-label="Security requirements" aria-live="polite">
-        <div className="checklist-title">Password must include:</div>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            marginBottom: '0.5rem',
+          }}
+        >
+          <div className="checklist-title" style={{ marginBottom: 0 }}>
+            Password must include:
+          </div>
+          {password.length > 0 && (
+            <span
+              style={{
+                fontSize: '0.75rem',
+                fontWeight: 600,
+                color: validCount === 4 ? '#34d399' : validCount >= 2 ? '#fbbf24' : '#fda4af',
+              }}
+            >
+              {validCount === 4 ? 'Strong' : validCount >= 2 ? 'Medium' : 'Weak'}
+            </span>
+          )}
+        </div>
+        {password.length > 0 && (
+          <div
+            style={{ display: 'flex', gap: '4px', height: '4px', marginBottom: '0.75rem' }}
+            aria-hidden="true"
+          >
+            {[1, 2, 3, 4].map((step) => (
+              <div
+                key={step}
+                style={{
+                  flex: 1,
+                  borderRadius: '2px',
+                  backgroundColor:
+                    step <= validCount
+                      ? validCount === 4
+                        ? '#10b981'
+                        : validCount >= 2
+                          ? '#f59e0b'
+                          : '#f43f5e'
+                      : 'rgba(255, 255, 255, 0.1)',
+                  transition: 'background-color 0.2s ease',
+                }}
+              />
+            ))}
+          </div>
+        )}
         <div
           className={`checklist-item ${
             passwordCriteria.minLength && passwordCriteria.maxLength ? 'valid' : 'invalid'
