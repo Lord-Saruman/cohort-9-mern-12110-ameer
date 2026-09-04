@@ -58,7 +58,7 @@ Default configuration:
 PORT=3000
 NODE_ENV=development
 CLIENT_ORIGIN=http://localhost:5173
-DATABASE_HOST=127.0.0.1
+DATABASE_HOST=localhost
 DATABASE_PORT=3306
 DATABASE_NAME=notes_app
 DATABASE_USER=notes_user

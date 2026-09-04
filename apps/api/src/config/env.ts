@@ -6,7 +6,7 @@ const environmentSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().int().positive().default(3000),
   CLIENT_ORIGIN: z.string().url().default('http://localhost:5173'),
-  DATABASE_HOST: z.string().min(1).default('127.0.0.1'),
+  DATABASE_HOST: z.string().min(1).default('localhost'),
   DATABASE_PORT: z.coerce.number().int().positive().default(3306),
   DATABASE_NAME: z.string().min(1).default('notes_app'),
   DATABASE_USER: z.string().min(1).default('notes_user'),
